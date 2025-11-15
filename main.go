@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"math"
 	"os"
@@ -11,32 +12,54 @@ import (
 )
 
 var reader = bufio.NewReader(os.Stdin)
-var defaultIndex = 0
-var savedDefaults []string
+var savedDefaults map[string]string
+var currentInputs map[string]string
+var useDefaults bool
+var debugMode bool
 
 // Global arrays for monthly costs
 var monthlyBuyingCosts []float64
 var monthlyRentingCosts []float64
+var remainingLoanBalance []float64
+var cumulativePrincipalPaid []float64
+var cumulativeInterestPaid []float64
 
 const inputsFile = ".rentobuy_inputs.json"
 
 func main() {
+	// Parse command line flags
+	flag.BoolVar(&useDefaults, "defaults", false, "Use all previously saved default values without prompting")
+	flag.BoolVar(&debugMode, "debug", false, "Show detailed debugging information including principal paid off")
+	flag.Parse()
+
 	// Load previous inputs
 	savedDefaults = loadInputs()
-	defaultIndex = 0
-	var inputs []string
+	currentInputs = make(map[string]string)
+
+	// Check if we have defaults when --defaults flag is used
+	if useDefaults && len(savedDefaults) == 0 {
+		fmt.Println("Error: --defaults flag used but no saved defaults found. Run without the flag first.")
+		return
+	}
+
+	// Get inflation rate first
+	fmt.Println("\n--- Economic Assumptions ---")
+	inflationRate, err := getFloatInputWithDefault("inflation_rate", "Enter annual inflation rate (e.g., 3 for 3%): ")
+	if err != nil {
+		fmt.Println("Invalid inflation rate")
+		return
+	}
+	fmt.Println("Note: All recurring costs (insurance, taxes, HOA, etc.) will increase annually at this rate.")
 
 	// Get purchase price
-	purchasePrice, inputStr, err := getFloatInputWithDefault("Enter purchase price: $")
-	inputs = append(inputs, inputStr)
+	purchasePrice, err := getFloatInputWithDefault("purchase_price", "\nEnter purchase price: $")
 	if err != nil {
 		fmt.Println("Invalid purchase price")
 		return
 	}
 
 	// Get downpayment
-	downpayment, inputStr, err := getFloatInputWithDefault("Enter downpayment: $")
-	inputs = append(inputs, inputStr)
+	downpayment, err := getFloatInputWithDefault("downpayment", "Enter downpayment: $")
 	if err != nil {
 		fmt.Println("Invalid downpayment")
 		return
@@ -45,38 +68,46 @@ func main() {
 	// Calculate loan amount
 	loanAmount := purchasePrice - downpayment
 
+	var annualRate float64
+	var totalMonths int
+	var monthlyRate float64
+	var monthlyLoanPayment float64
+
 	if loanAmount <= 0 {
-		fmt.Println("No loan needed. Purchase can be made with downpayment.")
-		return
-	}
+		fmt.Println("\nNo loan needed. Purchase can be made with downpayment.")
+		annualRate = 0
+		totalMonths = 0
+		monthlyRate = 0
+		monthlyLoanPayment = 0
+	} else {
+		// Get loan rate
+		annualRate, err = getFloatInputWithDefault("loan_rate", "Enter loan rate percentage (e.g., 6.5 for 6.5%): ")
+		if err != nil {
+			fmt.Println("Invalid loan rate")
+			return
+		}
 
-	// Get loan rate
-	annualRate, inputStr, err := getFloatInputWithDefault("Enter loan rate percentage (e.g., 6.5 for 6.5%): ")
-	inputs = append(inputs, inputStr)
-	if err != nil {
-		fmt.Println("Invalid loan rate")
-		return
-	}
+		// Get loan duration
+		totalMonths, err = getStringInputAndParseWithDefault("loan_duration", "Enter loan duration (e.g., 5y6m for 5 years 6 months): ", parseDuration)
+		if err != nil {
+			fmt.Println("Invalid duration format:", err)
+			return
+		}
 
-	// Get loan duration
-	totalMonths, inputStr, err := getStringInputAndParseWithDefault("Enter loan duration (e.g., 5y6m for 5 years 6 months): ", parseDuration)
-	inputs = append(inputs, inputStr)
-	if err != nil {
-		fmt.Println("Invalid duration format:", err)
-		return
+		// Calculate monthly payment for buying
+		monthlyRate = annualRate / 100 / 12
+		monthlyLoanPayment = calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths)
 	}
 
 	// Get annual expenses
 	fmt.Println("\n--- Annual Fixed Expenses ---")
-	annualInsurance, inputStr, err := getFloatInputWithDefault("Enter annual insurance: $")
-	inputs = append(inputs, inputStr)
+	annualInsurance, err := getFloatInputWithDefault("annual_insurance", "Enter annual insurance cost: $")
 	if err != nil {
 		fmt.Println("Invalid insurance amount")
 		return
 	}
 
-	annualTaxes, inputStr, err := getFloatInputWithDefault("Enter annual taxes: $")
-	inputs = append(inputs, inputStr)
+	annualTaxes, err := getFloatInputWithDefault("annual_taxes", "Enter other annual costs (taxes, etc.): $")
 	if err != nil {
 		fmt.Println("Invalid taxes amount")
 		return
@@ -86,8 +117,7 @@ func main() {
 
 	// Get monthly expenses
 	fmt.Println("\n--- Monthly Fixed Expenses ---")
-	monthlyExpenses, inputStr, err := getFloatInputWithDefault("Enter monthly fixed expenses (HOA, utilities, etc.): $")
-	inputs = append(inputs, inputStr)
+	monthlyExpenses, err := getFloatInputWithDefault("monthly_expenses", "Enter monthly fixed expenses (HOA, utilities, etc.): $")
 	if err != nil {
 		fmt.Println("Invalid monthly expenses")
 		return
@@ -95,8 +125,7 @@ func main() {
 
 	// Get asset appreciation rate
 	fmt.Println("\n--- Asset Appreciation ---")
-	appreciationRate, inputStr, err := getFloatInputWithDefault("Enter annual appreciation rate (e.g., 3 for 3%, -2 for -2% depreciation): ")
-	inputs = append(inputs, inputStr)
+	appreciationRate, err := getFloatInputWithDefault("appreciation_rate", "Enter annual appreciation rate (e.g., 3 for 3%, -2 for -2% depreciation): ")
 	if err != nil {
 		fmt.Println("Invalid appreciation rate")
 		return
@@ -104,47 +133,40 @@ func main() {
 
 	// Get renting parameters
 	fmt.Println("\n--- Renting Parameters ---")
-	rentDeposit, inputStr, err := getFloatInputWithDefault("Enter rental deposit: $")
-	inputs = append(inputs, inputStr)
+	rentDeposit, err := getFloatInputWithDefault("rent_deposit", "Enter rental deposit: $")
 	if err != nil {
 		fmt.Println("Invalid deposit amount")
 		return
 	}
 
-	monthlyRent, inputStr, err := getFloatInputWithDefault("Enter monthly rent: $")
-	inputs = append(inputs, inputStr)
+	monthlyRent, err := getFloatInputWithDefault("monthly_rent", "Enter monthly rent: $")
 	if err != nil {
 		fmt.Println("Invalid monthly rent")
 		return
 	}
 
-	annualRentCosts, inputStr, err := getFloatInputWithDefault("Enter annual rent costs: $")
-	inputs = append(inputs, inputStr)
+	annualRentCosts, err := getFloatInputWithDefault("annual_rent_costs", "Enter annual rent costs: $")
 	if err != nil {
 		fmt.Println("Invalid annual rent costs")
 		return
 	}
 
-	otherAnnualCosts, inputStr, err := getFloatInputWithDefault("Enter other annual costs: $")
-	inputs = append(inputs, inputStr)
+	otherAnnualCosts, err := getFloatInputWithDefault("other_annual_costs", "Enter other annual costs: $")
 	if err != nil {
 		fmt.Println("Invalid other annual costs")
 		return
 	}
 
-	investmentReturnRate, inputStr, err := getFloatInputWithDefault("Enter investment return rate (e.g., 7 for 7%): ")
-	inputs = append(inputs, inputStr)
+	investmentReturnRate, err := getFloatInputWithDefault("investment_return_rate", "Enter investment return rate (e.g., 7 for 7%): ")
 	if err != nil {
 		fmt.Println("Invalid investment return rate")
 		return
 	}
 
 	// Save inputs for next time
-	saveInputs(inputs)
+	saveInputs(currentInputs)
 
-	// Calculate monthly payment for buying
-	monthlyRate := annualRate / 100 / 12
-	monthlyLoanPayment := calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths)
+	// Calculate monthly recurring expenses
 	monthlyRecurringExpenses := (totalAnnualExpenses / 12) + monthlyExpenses
 	totalMonthlyBuyingCost := monthlyLoanPayment + monthlyRecurringExpenses
 
@@ -153,14 +175,18 @@ func main() {
 	totalMonthlyRentingCost := monthlyRent + monthlyRentingExpenses
 
 	// Populate global cost arrays for projections (360 months = 30 years max)
-	populateMonthlyCosts(360, monthlyLoanPayment, monthlyRecurringExpenses, totalMonths, totalMonthlyRentingCost)
+	populateMonthlyCosts(360, monthlyLoanPayment, monthlyRecurringExpenses, totalMonths, totalMonthlyRentingCost, loanAmount, monthlyRate, inflationRate)
 
 	// Display results
 	fmt.Println("\n=== Buying Details ===")
-	fmt.Printf("Loan amount: %s\n", formatCurrency(loanAmount))
-	fmt.Printf("Annual interest rate: %.2f%%\n", annualRate)
-	fmt.Printf("Loan duration: %s months\n", formatNumber(totalMonths))
-	fmt.Printf("\nMonthly loan payment: %s\n", formatCurrency(monthlyLoanPayment))
+	if loanAmount > 0 {
+		fmt.Printf("Loan amount: %s\n", formatCurrency(loanAmount))
+		fmt.Printf("Annual interest rate: %.2f%%\n", annualRate)
+		fmt.Printf("Loan duration: %s months\n", formatNumber(totalMonths))
+		fmt.Printf("\nMonthly loan payment: %s\n", formatCurrency(monthlyLoanPayment))
+	} else {
+		fmt.Printf("Loan amount: %s (no loan needed)\n", formatCurrency(loanAmount))
+	}
 	fmt.Printf("Monthly recurring expenses: %s\n", formatCurrency(monthlyRecurringExpenses))
 	fmt.Printf("Total monthly buying cost: %s\n", formatCurrency(totalMonthlyBuyingCost))
 
@@ -171,15 +197,36 @@ func main() {
 	fmt.Printf("Total monthly renting cost: %s\n", formatCurrency(totalMonthlyRentingCost))
 
 	// Display projections
+	fmt.Println("\n=== Total Expenditure Comparison ===")
+	displayExpenditureTable(downpayment, totalMonths, rentDeposit)
+
+	if debugMode && loanAmount > 0 {
+		fmt.Println("\n=== Loan Amortization Details ===")
+		displayAmortizationTable(loanAmount, totalMonths)
+	}
+
 	fmt.Println("\n=== Net Worth Projections: Buy vs Rent ===")
 	displayComparisonTable(purchasePrice, downpayment, appreciationRate, totalMonths,
 		rentDeposit, investmentReturnRate)
 }
 
 // getInputWithDefault prompts the user and reads string input with default value support
-// Automatically uses the next default value from savedDefaults
-func getInputWithDefault(prompt string) string {
-	defaultValue := getDefault()
+// Uses the key to retrieve the appropriate default value from savedDefaults
+func getInputWithDefault(key, prompt string) string {
+	defaultValue := savedDefaults[key]
+
+	// If --defaults flag is set, automatically use the default
+	if useDefaults {
+		if defaultValue != "" {
+			fmt.Printf("%s%s (using default)\n", prompt, defaultValue)
+			currentInputs[key] = defaultValue
+			return defaultValue
+		}
+		// No default available but flag is set - this shouldn't happen due to check in main
+		fmt.Printf("%s(no default available)\n", prompt)
+		currentInputs[key] = ""
+		return ""
+	}
 
 	if defaultValue != "" {
 		fmt.Printf("%s[%s] ", prompt, defaultValue)
@@ -195,52 +242,42 @@ func getInputWithDefault(prompt string) string {
 		input = defaultValue
 	}
 
+	currentInputs[key] = input
 	return input
 }
 
-// getDefault returns the next default value and increments the counter
-func getDefault() string {
-	if defaultIndex < len(savedDefaults) {
-		val := savedDefaults[defaultIndex]
-		defaultIndex++
-		return val
-	}
-	defaultIndex++
-	return ""
-}
-
 // getFloatInputWithDefault prompts with a default and converts to float
-func getFloatInputWithDefault(prompt string) (float64, string, error) {
-	input := getInputWithDefault(prompt)
+func getFloatInputWithDefault(key, prompt string) (float64, error) {
+	input := getInputWithDefault(key, prompt)
 	value, err := parseAmount(input)
-	return value, input, err
+	return value, err
 }
 
 // getStringInputAndParseWithDefault prompts with a default and applies parser
-func getStringInputAndParseWithDefault(prompt string, parser func(string) (int, error)) (int, string, error) {
-	input := getInputWithDefault(prompt)
+func getStringInputAndParseWithDefault(key, prompt string, parser func(string) (int, error)) (int, error) {
+	input := getInputWithDefault(key, prompt)
 	value, err := parser(input)
-	return value, input, err
+	return value, err
 }
 
 // loadInputs loads previously saved inputs from file
-func loadInputs() []string {
+func loadInputs() map[string]string {
 	data, err := os.ReadFile(inputsFile)
 	if err != nil {
-		return []string{}
+		return make(map[string]string)
 	}
 
-	var inputs []string
+	var inputs map[string]string
 	err = json.Unmarshal(data, &inputs)
 	if err != nil {
-		return []string{}
+		return make(map[string]string)
 	}
 
 	return inputs
 }
 
 // saveInputs saves current inputs to file for next run
-func saveInputs(inputs []string) {
+func saveInputs(inputs map[string]string) {
 	data, err := json.Marshal(inputs)
 	if err != nil {
 		return
@@ -385,21 +422,29 @@ func calculateMonthlyPayment(principal, monthlyRate float64, months int) float64
 	return monthlyPayment
 }
 
-// displayComparisonTable displays buy vs rent net worth projections side-by-side
-// Uses global monthlyBuyingCosts and monthlyRentingCosts arrays
-func displayComparisonTable(purchasePrice, downpayment, appreciationRate float64, loanDuration int,
-	rentDeposit, investmentReturnRate float64) {
-	// Define standard periods
+// getPeriods returns the list of time periods to display in tables
+func getPeriods(loanDuration int) []struct {
+	label  string
+	months int
+} {
+	// Define standard periods with proper spacing for alignment
 	standardPeriods := []struct {
 		label  string
 		months int
 	}{
-		{"1 year", 12},
-		{"3 years", 36},
-		{"5 years", 60},
-		{"10 years", 120},
-		{"20 years", 240},
-		{"30 years", 360},
+		{"  1 year", 12},
+		{"  2 years", 24},
+		{"  3 years", 36},
+		{"  4 years", 48},
+		{"  5 years", 60},
+		{"  6 years", 72},
+		{"  7 years", 84},
+		{"  8 years", 96},
+		{"  9 years", 108},
+		{" 10 years", 120},
+		{" 15 years", 180},
+		{" 20 years", 240},
+		{" 30 years", 360},
 	}
 
 	// Build the final list of periods, inserting loan term if needed
@@ -408,11 +453,15 @@ func displayComparisonTable(purchasePrice, downpayment, appreciationRate float64
 		months int
 	}{}
 
-	loanTermLabel := fmt.Sprintf("Loan term (%d years)", loanDuration/12)
-	if loanDuration%12 != 0 {
+	// Create loan term label with X prefix
+	var loanTermLabel string
+	if loanDuration%12 == 0 {
+		years := loanDuration / 12
+		loanTermLabel = fmt.Sprintf("X %d years", years)
+	} else {
 		years := loanDuration / 12
 		months := loanDuration % 12
-		loanTermLabel = fmt.Sprintf("Loan term (%dy %dm)", years, months)
+		loanTermLabel = fmt.Sprintf("X %dy %dm", years, months)
 	}
 
 	inserted := false
@@ -446,13 +495,84 @@ func displayComparisonTable(purchasePrice, downpayment, appreciationRate float64
 		}{loanTermLabel, loanDuration})
 	}
 
+	return periods
+}
+
+// displayAmortizationTable displays loan amortization details
+func displayAmortizationTable(loanAmount float64, loanDuration int) {
+	periods := getPeriods(loanDuration)
+
 	// Print table header
-	fmt.Printf("\n%-20s %-25s %-25s %-25s\n", "Period", "Buying Net Worth", "Renting Net Worth", "Difference")
+	fmt.Printf("\n%-20s %-20s %-20s %-20s\n", "Period", "Principal Paid", "Interest Paid", "Loan Balance")
+	fmt.Println(strings.Repeat("-", 80))
+
+	// Print each row
+	for _, period := range periods {
+		monthIndex := period.months - 1
+		if monthIndex >= len(remainingLoanBalance) {
+			monthIndex = len(remainingLoanBalance) - 1
+		}
+
+		principalPaid := cumulativePrincipalPaid[monthIndex]
+		interestPaid := cumulativeInterestPaid[monthIndex]
+		loanBalance := remainingLoanBalance[monthIndex]
+
+		fmt.Printf("%-20s %-20s %-20s %-20s\n",
+			period.label,
+			formatCurrency(principalPaid),
+			formatCurrency(interestPaid),
+			formatCurrency(loanBalance),
+		)
+	}
+}
+
+// displayExpenditureTable displays total expenditure for buying vs renting
+// Uses global monthlyBuyingCosts and monthlyRentingCosts arrays
+func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit float64) {
+	periods := getPeriods(loanDuration)
+
+	// Print table header
+	fmt.Printf("\n%-20s %-25s %-25s %-25s\n", "Period", "Buying Expenditure", "Renting Expenditure", "Difference")
 	fmt.Println(strings.Repeat("-", 95))
 
 	// Print each row
 	for _, period := range periods {
-		_, _, buyingNetWorth := calculateNetWorth(
+		// Calculate total buying expenditure (downpayment + all monthly costs)
+		buyingExpenditure := downpayment
+		for i := 0; i < period.months; i++ {
+			buyingExpenditure += monthlyBuyingCosts[i]
+		}
+
+		// Calculate total renting expenditure (deposit + all monthly costs)
+		rentingExpenditure := rentDeposit
+		for i := 0; i < period.months; i++ {
+			rentingExpenditure += monthlyRentingCosts[i]
+		}
+
+		difference := buyingExpenditure - rentingExpenditure
+
+		fmt.Printf("%-20s %-25s %-25s %-25s\n",
+			period.label,
+			formatCurrency(buyingExpenditure),
+			formatCurrency(rentingExpenditure),
+			formatCurrency(difference),
+		)
+	}
+}
+
+// displayComparisonTable displays buy vs rent net worth projections side-by-side
+// Uses global monthlyBuyingCosts and monthlyRentingCosts arrays
+func displayComparisonTable(purchasePrice, downpayment, appreciationRate float64, loanDuration int,
+	rentDeposit, investmentReturnRate float64) {
+	periods := getPeriods(loanDuration)
+
+	// Print table header
+	fmt.Printf("\n%-15s %-18s %-18s %-18s %-18s %-18s\n", "Period", "Asset Value", "Buying Net Worth", "Cumulative Savings", "Renting Net Worth", "RENT - BUY")
+	fmt.Println(strings.Repeat("-", 110))
+
+	// Print each row
+	for _, period := range periods {
+		assetValue, _, buyingNetWorth := calculateNetWorth(
 			period.months, purchasePrice, downpayment, appreciationRate,
 		)
 
@@ -460,11 +580,19 @@ func displayComparisonTable(purchasePrice, downpayment, appreciationRate float64
 			period.months, downpayment, rentDeposit, investmentReturnRate,
 		)
 
-		difference := buyingNetWorth - rentingNetWorth
+		// Calculate cumulative savings (without investment growth)
+		cumulativeSavings := downpayment - rentDeposit
+		for i := 0; i < period.months; i++ {
+			cumulativeSavings += monthlyBuyingCosts[i] - monthlyRentingCosts[i]
+		}
 
-		fmt.Printf("%-20s %-25s %-25s %-25s\n",
+		difference := rentingNetWorth - buyingNetWorth
+
+		fmt.Printf("%-15s %-18s %-18s %-18s %-18s %-18s\n",
 			period.label,
+			formatCurrency(assetValue),
 			formatCurrency(buyingNetWorth),
+			formatCurrency(cumulativeSavings),
 			formatCurrency(rentingNetWorth),
 			formatCurrency(difference),
 		)
@@ -551,7 +679,7 @@ func displayNetWorthTable(purchasePrice, downpayment, appreciationRate float64, 
 }
 
 // calculateNetWorth calculates the asset value, total expenditure, and net worth for a given time period
-// Uses the global monthlyBuyingCosts array
+// Uses the global monthlyBuyingCosts and remainingLoanBalance arrays
 func calculateNetWorth(months int, purchasePrice, downpayment, appreciationRate float64) (float64, float64, float64) {
 	// Calculate years for appreciation (asset continues to appreciate beyond loan term)
 	years := float64(months) / 12.0
@@ -565,27 +693,73 @@ func calculateNetWorth(months int, purchasePrice, downpayment, appreciationRate 
 		totalExpenditure += monthlyBuyingCosts[i]
 	}
 
-	// Calculate net worth
-	netWorth := assetValue - totalExpenditure
+	// Get remaining loan balance at this point
+	monthIndex := months - 1
+	if monthIndex >= len(remainingLoanBalance) {
+		monthIndex = len(remainingLoanBalance) - 1
+	}
+	loanBalance := remainingLoanBalance[monthIndex]
+
+	// Calculate net worth: asset value minus what you still owe
+	netWorth := assetValue - loanBalance
 
 	return assetValue, totalExpenditure, netWorth
 }
 
 // populateMonthlyCosts fills global arrays with monthly costs for buying and renting
-func populateMonthlyCosts(maxMonths int, monthlyLoanPayment, monthlyRecurringExpenses float64, loanDuration int, monthlyRentingCost float64) {
+func populateMonthlyCosts(maxMonths int, monthlyLoanPayment, monthlyRecurringExpenses float64, loanDuration int, monthlyRentingCost, loanAmount, monthlyRate, inflationRate float64) {
 	monthlyBuyingCosts = make([]float64, maxMonths)
 	monthlyRentingCosts = make([]float64, maxMonths)
+	remainingLoanBalance = make([]float64, maxMonths)
+	cumulativePrincipalPaid = make([]float64, maxMonths)
+	cumulativeInterestPaid = make([]float64, maxMonths)
+
+	// Calculate current rental cost with annual increases
+	currentRentingCost := monthlyRentingCost
+
+	// Track current recurring expenses (will increase with inflation)
+	currentRecurringExpenses := monthlyRecurringExpenses
+
+	// Track remaining loan balance
+	currentBalance := loanAmount
+	totalPrincipalPaid := 0.0
+	totalInterestPaid := 0.0
 
 	for i := 0; i < maxMonths; i++ {
-		// Renting cost is constant every month
-		monthlyRentingCosts[i] = monthlyRentingCost
+		// Apply inflation to all costs at the start of each year (except the first month)
+		if i > 0 && i%12 == 0 {
+			currentRentingCost *= (1 + inflationRate/100)
+			currentRecurringExpenses *= (1 + inflationRate/100)
+		}
+
+		// Set renting cost for this month
+		monthlyRentingCosts[i] = currentRentingCost
 
 		// Buying cost: loan payment stops after loan duration, but recurring expenses continue
 		if i < loanDuration {
-			monthlyBuyingCosts[i] = monthlyLoanPayment + monthlyRecurringExpenses
+			monthlyBuyingCosts[i] = monthlyLoanPayment + currentRecurringExpenses
+
+			// Calculate interest for this month
+			interestPayment := currentBalance * monthlyRate
+			// Principal payment is the remainder
+			principalPayment := monthlyLoanPayment - interestPayment
+			// Reduce the balance
+			currentBalance -= principalPayment
+
+			// Track cumulative amounts
+			totalPrincipalPaid += principalPayment
+			totalInterestPaid += interestPayment
+
+			// Store remaining balance after this payment
+			remainingLoanBalance[i] = currentBalance
+			cumulativePrincipalPaid[i] = totalPrincipalPaid
+			cumulativeInterestPaid[i] = totalInterestPaid
 		} else {
 			// After loan is paid off, only recurring expenses remain
-			monthlyBuyingCosts[i] = monthlyRecurringExpenses
+			monthlyBuyingCosts[i] = currentRecurringExpenses
+			remainingLoanBalance[i] = 0
+			cumulativePrincipalPaid[i] = totalPrincipalPaid
+			cumulativeInterestPaid[i] = totalInterestPaid
 		}
 	}
 }
