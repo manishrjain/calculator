@@ -9,6 +9,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 )
 
 var reader = bufio.NewReader(os.Stdin)
@@ -244,7 +247,11 @@ func main() {
 	// Display projections
 	fmt.Println("\n=== Total Expenditure Comparison ===")
 	displayExpenditureTable(downpayment, totalMonths, rentDeposit, include30Year)
-	fmt.Println("\nNote: All recurring costs (insurance, taxes, rent, HOA, etc.) are inflated annually at", inflationRate, "% rate.")
+
+	// Format note
+	re := lipgloss.NewRenderer(os.Stdout)
+	noteStyle := re.NewStyle().Foreground(lipgloss.Color("240")).Italic(true).MarginTop(1)
+	fmt.Println(noteStyle.Render(fmt.Sprintf("Note: All recurring costs (insurance, taxes, rent, HOA, etc.) are inflated annually at %.1f%% rate.", inflationRate)))
 
 	if loanAmount > 0 {
 		fmt.Println("\n=== Loan Amortization Details ===")
@@ -673,11 +680,10 @@ func displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmoun
 func displayAmortizationTable(loanAmount float64, loanDuration int, include30Year float64) {
 	periods := getPeriods(loanDuration, include30Year > 0)
 
-	// Print table header
-	fmt.Printf("\n%-12s %-15s %-15s %-15s\n", "Period", "Principal Paid", "Interest Paid", "Loan Balance")
-	fmt.Println(strings.Repeat("-", 57))
+	// Build table rows
+	rows := [][]string{}
 
-	// Print each row
+	// Build each row
 	for _, period := range periods {
 		monthIndex := period.months - 1
 		if monthIndex >= len(remainingLoanBalance) {
@@ -688,13 +694,48 @@ func displayAmortizationTable(loanAmount float64, loanDuration int, include30Yea
 		interestPaid := cumulativeInterestPaid[monthIndex]
 		loanBalance := remainingLoanBalance[monthIndex]
 
-		fmt.Printf("%-12s %-15s %-15s %-15s\n",
-			"LOAN "+period.label,
+		rows = append(rows, []string{
+			"LOAN " + period.label,
 			formatCurrency(principalPaid),
 			formatCurrency(interestPaid),
 			formatCurrency(loanBalance),
-		)
+		})
 	}
+
+	// Create and style the table
+	re := lipgloss.NewRenderer(os.Stdout)
+
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
+		Light: "240",
+		Dark:  "255",
+	})
+
+	allRows := append([][]string{
+		{"Period", "Principal Paid", "Interest Paid", "Loan Balance"},
+	}, rows...)
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(re.NewStyle().Foreground(lipgloss.Color("238"))).
+		Rows(allRows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			var style lipgloss.Style
+			if row == 0 {
+				style = headerStyle
+			} else {
+				style = rowStyle
+			}
+
+			if col > 0 {
+				style = style.Align(lipgloss.Right)
+			}
+
+			return style
+		})
+
+	fmt.Println()
+	fmt.Println(t)
 }
 
 // displayExpenditureTable displays total expenditure for buying vs renting
@@ -702,9 +743,8 @@ func displayAmortizationTable(loanAmount float64, loanDuration int, include30Yea
 func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit float64, include30Year float64) {
 	periods := getPeriods(loanDuration, include30Year > 0)
 
-	// Print table header
-	fmt.Printf("\n%-12s %-18s %-18s %-15s\n", "Period", "Buying Expend.", "Renting Expend.", "Difference")
-	fmt.Println(strings.Repeat("-", 63))
+	// Build table rows
+	rows := [][]string{}
 
 	// Print each row
 	for _, period := range periods {
@@ -722,13 +762,48 @@ func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit 
 
 		difference := buyingExpenditure - rentingExpenditure
 
-		fmt.Printf("%-12s %-18s %-18s %-15s\n",
-			"EXP "+period.label,
+		rows = append(rows, []string{
+			"EXP " + period.label,
 			formatCurrency(buyingExpenditure),
 			formatCurrency(rentingExpenditure),
 			formatCurrency(difference),
-		)
+		})
 	}
+
+	// Create and style the table
+	re := lipgloss.NewRenderer(os.Stdout)
+
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
+		Light: "240",
+		Dark:  "255",
+	})
+
+	allRows := append([][]string{
+		{"Period", "Buying Expend.", "Renting Expend.", "Difference"},
+	}, rows...)
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(re.NewStyle().Foreground(lipgloss.Color("238"))).
+		Rows(allRows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			var style lipgloss.Style
+			if row == 0 {
+				style = headerStyle
+			} else {
+				style = rowStyle
+			}
+
+			if col > 0 {
+				style = style.Align(lipgloss.Right)
+			}
+
+			return style
+		})
+
+	fmt.Println()
+	fmt.Println(t)
 }
 
 // displayComparisonTable displays buy vs rent net worth projections side-by-side
@@ -738,11 +813,10 @@ func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int
 	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64) {
 	periods := getPeriods(loanDuration, include30Year > 0)
 
-	// Print table header
-	fmt.Printf("\n%-12s %-13s %-12s %-13s %-13s %-12s %-12s\n", "Period", "Asset Value", "Buying NW", "Cumul. Savings", "Market Return", "Renting NW", "RENT - BUY")
-	fmt.Println(strings.Repeat("-", 87))
+	// Build table rows
+	rows := [][]string{}
 
-	// Print each row
+	// Build each row
 	for _, period := range periods {
 		assetValue, _, buyingNetWorth := calculateNetWorth(
 			period.months, purchasePrice, downpayment, includeSelling,
@@ -765,16 +839,51 @@ func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int
 
 		difference := rentingNetWorth - buyingNetWorth
 
-		fmt.Printf("%-12s %-13s %-12s %-13s %-13s %-12s %-12s\n",
-			"NET "+period.label,
+		rows = append(rows, []string{
+			"NET " + period.label,
 			formatCurrency(assetValue),
 			formatCurrency(buyingNetWorth),
 			formatCurrency(cumulativeSavings),
 			formatCurrency(marketReturn),
 			formatCurrency(rentingNetWorth),
 			formatCurrency(difference),
-		)
+		})
 	}
+
+	// Create and style the table
+	re := lipgloss.NewRenderer(os.Stdout)
+
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
+		Light: "240",
+		Dark:  "255",
+	})
+
+	allRows := append([][]string{
+		{"Period", "Asset Value", "Buying NW", "Cumul. Savings", "Market Return", "Renting NW", "RENT - BUY"},
+	}, rows...)
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(re.NewStyle().Foreground(lipgloss.Color("238"))).
+		Rows(allRows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			var style lipgloss.Style
+			if row == 0 {
+				style = headerStyle
+			} else {
+				style = rowStyle
+			}
+
+			if col > 0 {
+				style = style.Align(lipgloss.Right)
+			}
+
+			return style
+		})
+
+	fmt.Println()
+	fmt.Println(t)
 }
 
 // calculateSaleProceeds calculates the net proceeds from selling at a given time
@@ -836,26 +945,59 @@ func displaySaleProceeds(purchasePrice, downpayment float64, loanDuration int,
 	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64, include30Year float64) {
 	periods := getPeriods(loanDuration, include30Year > 0)
 
-	// Print table header
-	fmt.Printf("\n%-12s %-13s %-13s %-13s %-13s %-13s %-13s\n",
-		"Period", "Sale Price", "Selling Cost", "Loan Payoff", "Capital Gain", "Tax on Gain", "Net Proceeds")
-	fmt.Println(strings.Repeat("-", 90))
+	// Build table rows
+	rows := [][]string{}
 
-	// Print each row
+	// Build each row
 	for _, period := range periods {
 		salePrice, totalSellingCosts, loanPayoff, capitalGains, taxOnGains, netProceeds := calculateSaleProceeds(
 			period.months, purchasePrice, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax)
 
-		fmt.Printf("%-12s %-13s %-13s %-13s %-13s %-13s %-13s\n",
-			"SALE "+period.label,
+		rows = append(rows, []string{
+			"SALE " + period.label,
 			formatCurrency(salePrice),
 			formatCurrency(totalSellingCosts),
 			formatCurrency(loanPayoff),
 			formatCurrency(capitalGains),
 			formatCurrency(taxOnGains),
 			formatCurrency(netProceeds),
-		)
+		})
 	}
+
+	// Create and style the table
+	re := lipgloss.NewRenderer(os.Stdout)
+
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
+		Light: "240",
+		Dark:  "255",
+	})
+
+	allRows := append([][]string{
+		{"Period", "Sale Price", "Selling Cost", "Loan Payoff", "Capital Gain", "Tax on Gain", "Net Proceeds"},
+	}, rows...)
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(re.NewStyle().Foreground(lipgloss.Color("238"))).
+		Rows(allRows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			var style lipgloss.Style
+			if row == 0 {
+				style = headerStyle
+			} else {
+				style = rowStyle
+			}
+
+			if col > 0 {
+				style = style.Align(lipgloss.Right)
+			}
+
+			return style
+		})
+
+	fmt.Println()
+	fmt.Println(t)
 }
 
 // displayNetWorthTable displays net worth projections in a table format

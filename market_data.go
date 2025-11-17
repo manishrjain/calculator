@@ -7,8 +7,10 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 )
 
 const marketDataFile = ".rentobuy_market_data.json"
@@ -328,7 +330,7 @@ func calculateMarketAverages(md *MarketData) (voo, qqq, vti, bnd, mix6040 float6
 
 // displayMarketData shows historical returns and averages
 func displayMarketData(md *MarketData) {
-	fmt.Println("\n=== MARKET DATA ===")
+	fmt.Println("\n=== MARKET DATA ===\n")
 
 	// Get sorted years
 	years := make([]string, 0)
@@ -341,9 +343,8 @@ func displayMarketData(md *MarketData) {
 	}
 	sort.Strings(years)
 
-	// Display table
-	fmt.Printf("\n%-10s %-10s %-10s %-10s %-10s %-12s\n", "Period", "VOO", "QQQ", "VTI", "BND", "60/40 Mix")
-	fmt.Println(strings.Repeat("-", 68))
+	// Build table rows
+	rows := [][]string{}
 
 	var vooSum, qqqSum, vtiSum, bndSum float64
 	count := 0
@@ -364,22 +365,64 @@ func displayMarketData(md *MarketData) {
 			count++
 		}
 
-		fmt.Printf("MRKT   %-6s %-10s %-10s %-10s %-10s %-12s\n", year,
+		rows = append(rows, []string{
+			"MRKT " + year,
 			fmt.Sprintf("%.2f%%", vooRet),
 			fmt.Sprintf("%.2f%%", qqqRet),
 			fmt.Sprintf("%.2f%%", vtiRet),
 			fmt.Sprintf("%.2f%%", bndRet),
-			fmt.Sprintf("%.2f%%", mix6040))
+			fmt.Sprintf("%.2f%%", mix6040),
+		})
 	}
 
+	// Add average row if we have data
 	if count > 0 {
 		avgMix := (vtiSum/float64(count))*0.6 + (bndSum/float64(count))*0.4
-		fmt.Println(strings.Repeat("-", 68))
-		fmt.Printf("MRKT   %-6s %-10s %-10s %-10s %-10s %-12s\n", "Avg",
+		rows = append(rows, []string{
+			"MRKT Avg",
 			fmt.Sprintf("%.2f%%", vooSum/float64(count)),
 			fmt.Sprintf("%.2f%%", qqqSum/float64(count)),
 			fmt.Sprintf("%.2f%%", vtiSum/float64(count)),
 			fmt.Sprintf("%.2f%%", bndSum/float64(count)),
-			fmt.Sprintf("%.2f%%", avgMix))
+			fmt.Sprintf("%.2f%%", avgMix),
+		})
 	}
+
+	// Create and style the table
+	re := lipgloss.NewRenderer(os.Stdout)
+
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	// Use adaptive color: bright white on dark backgrounds, dark gray on light backgrounds
+	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
+		Light: "240", // Dark gray for light backgrounds
+		Dark:  "255", // Bright white for dark backgrounds
+	})
+
+	// Insert header as first row with special styling
+	allRows := append([][]string{
+		{"Period", "VOO", "QQQ", "VTI", "BND", "60/40 Mix"},
+	}, rows...)
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(re.NewStyle().Foreground(lipgloss.Color("238"))).
+		Rows(allRows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			var style lipgloss.Style
+			if row == 0 || row == len(allRows)-1 {
+				// Header row and average row (last row)
+				style = headerStyle
+			} else {
+				style = rowStyle
+			}
+
+			// Right-align all number columns (col > 0)
+			if col > 0 {
+				style = style.Align(lipgloss.Right)
+			}
+
+			return style
+		})
+
+	fmt.Println(t)
 }
