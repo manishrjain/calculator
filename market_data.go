@@ -16,8 +16,10 @@ const marketDataFile = ".rentobuy_market_data.json"
 // MarketData stores historical annual returns
 type MarketData struct {
 	LastUpdated string             `json:"last_updated"`
-	SP500       map[string]float64 `json:"sp500"`  // Year -> Annual return %
-	QQQ         map[string]float64 `json:"qqq"`    // Year -> Annual return %
+	VOO         map[string]float64 `json:"voo"`    // Year -> Annual return % (S&P 500)
+	QQQ         map[string]float64 `json:"qqq"`    // Year -> Annual return % (Nasdaq 100)
+	VTI         map[string]float64 `json:"vti"`    // Year -> Annual return % (Total Stock Market)
+	BND         map[string]float64 `json:"bnd"`    // Year -> Annual return % (Total Bond Market)
 }
 
 // YahooChartResponse represents the JSON response from Yahoo Finance chart API
@@ -154,8 +156,10 @@ func loadMarketData() (*MarketData, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &MarketData{
-				SP500: make(map[string]float64),
-				QQQ:   make(map[string]float64),
+				VOO: make(map[string]float64),
+				QQQ: make(map[string]float64),
+				VTI: make(map[string]float64),
+				BND: make(map[string]float64),
 			}, nil
 		}
 		return nil, err
@@ -167,11 +171,17 @@ func loadMarketData() (*MarketData, error) {
 		return nil, err
 	}
 
-	if md.SP500 == nil {
-		md.SP500 = make(map[string]float64)
+	if md.VOO == nil {
+		md.VOO = make(map[string]float64)
 	}
 	if md.QQQ == nil {
 		md.QQQ = make(map[string]float64)
+	}
+	if md.VTI == nil {
+		md.VTI = make(map[string]float64)
+	}
+	if md.BND == nil {
+		md.BND = make(map[string]float64)
 	}
 
 	return &md, nil
@@ -214,7 +224,7 @@ func updateMarketData() (*MarketData, error) {
 
 	// Also update if we don't have current year data
 	currentYear := fmt.Sprintf("%d", now.Year())
-	if _, ok := md.SP500[currentYear]; !ok {
+	if _, ok := md.VOO[currentYear]; !ok {
 		needsUpdate = true
 	}
 
@@ -228,37 +238,38 @@ func updateMarketData() (*MarketData, error) {
 	startDate := time.Now().AddDate(-11, 0, 0)
 	endDate := time.Now()
 
-	// Fetch S&P 500
-	sp500Records, err := fetchYahooFinanceData("^GSPC", startDate, endDate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch S&P 500 data: %v", err)
+	// Define tickers to fetch
+	tickers := []struct {
+		symbol string
+		target *map[string]float64
+	}{
+		{"VOO", &md.VOO},
+		{"QQQ", &md.QQQ},
+		{"VTI", &md.VTI},
+		{"BND", &md.BND},
 	}
 
-	sp500Returns, err := calculateAnnualReturns(sp500Records)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate S&P 500 returns: %v", err)
-	}
+	// Fetch each ticker
+	for i, ticker := range tickers {
+		records, err := fetchYahooFinanceData(ticker.symbol, startDate, endDate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch %s data: %v", ticker.symbol, err)
+		}
 
-	// Wait a bit to avoid rate limiting
-	time.Sleep(1 * time.Second)
+		returns, err := calculateAnnualReturns(records)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate %s returns: %v", ticker.symbol, err)
+		}
 
-	// Fetch QQQ
-	qqqRecords, err := fetchYahooFinanceData("QQQ", startDate, endDate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch QQQ data: %v", err)
-	}
+		// Update cache with new data
+		for year, ret := range returns {
+			(*ticker.target)[year] = ret
+		}
 
-	qqqReturns, err := calculateAnnualReturns(qqqRecords)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate QQQ returns: %v", err)
-	}
-
-	// Update cache with new data
-	for year, ret := range sp500Returns {
-		md.SP500[year] = ret
-	}
-	for year, ret := range qqqReturns {
-		md.QQQ[year] = ret
+		// Wait a bit to avoid rate limiting (except on last iteration)
+		if i < len(tickers)-1 {
+			time.Sleep(1 * time.Second)
+		}
 	}
 
 	// Save to cache
@@ -272,34 +283,47 @@ func updateMarketData() (*MarketData, error) {
 	return md, nil
 }
 
-// calculateMarketAverages calculates 10-year averages for S&P 500 and QQQ
-func calculateMarketAverages(md *MarketData) (float64, float64) {
+// calculateMarketAverages calculates 10-year averages for all ETFs
+func calculateMarketAverages(md *MarketData) (voo, qqq, vti, bnd, mix6040 float64) {
 	if md == nil {
-		return 0, 0
+		return 0, 0, 0, 0, 0
 	}
 
-	var sp500Sum, qqqSum float64
+	var vooSum, qqqSum, vtiSum, bndSum float64
 	count := 0
 
 	currentYear := time.Now().Year()
 
-	for year, sp500Ret := range md.SP500 {
+	for year, vooRet := range md.VOO {
 		yearInt, _ := strconv.Atoi(year)
 		// Only include complete years (not current year) from last 10 years
 		if yearInt >= currentYear-10 && yearInt < currentYear {
+			// Only count years where we have all data
 			if qqqRet, ok := md.QQQ[year]; ok {
-				sp500Sum += sp500Ret
-				qqqSum += qqqRet
-				count++
+				if vtiRet, ok := md.VTI[year]; ok {
+					if bndRet, ok := md.BND[year]; ok {
+						vooSum += vooRet
+						qqqSum += qqqRet
+						vtiSum += vtiRet
+						bndSum += bndRet
+						count++
+					}
+				}
 			}
 		}
 	}
 
 	if count == 0 {
-		return 0, 0
+		return 0, 0, 0, 0, 0
 	}
 
-	return sp500Sum / float64(count), qqqSum / float64(count)
+	voo = vooSum / float64(count)
+	qqq = qqqSum / float64(count)
+	vti = vtiSum / float64(count)
+	bnd = bndSum / float64(count)
+	mix6040 = vti*0.6 + bnd*0.4
+
+	return
 }
 
 // displayMarketData shows historical returns and averages
@@ -308,7 +332,7 @@ func displayMarketData(md *MarketData) {
 
 	// Get sorted years
 	years := make([]string, 0)
-	for year := range md.SP500 {
+	for year := range md.VOO {
 		// Only show last 10 complete years
 		yearInt, _ := strconv.Atoi(year)
 		if yearInt >= time.Now().Year()-10 {
@@ -318,32 +342,44 @@ func displayMarketData(md *MarketData) {
 	sort.Strings(years)
 
 	// Display table
-	fmt.Printf("\n%-15s %-18s %-18s\n", "Period", "S&P 500", "QQQ")
-	fmt.Println(strings.Repeat("-", 55))
+	fmt.Printf("\n%-10s %-10s %-10s %-10s %-10s %-12s\n", "Period", "VOO", "QQQ", "VTI", "BND", "60/40 Mix")
+	fmt.Println(strings.Repeat("-", 68))
 
-	var sp500Sum, qqqSum float64
+	var vooSum, qqqSum, vtiSum, bndSum float64
 	count := 0
 
 	for _, year := range years {
-		sp500Ret := md.SP500[year]
+		vooRet := md.VOO[year]
 		qqqRet := md.QQQ[year]
+		vtiRet := md.VTI[year]
+		bndRet := md.BND[year]
+		mix6040 := vtiRet*0.6 + bndRet*0.4
 
 		// Only include in average if it's a complete year (not current year)
 		if year != fmt.Sprintf("%d", time.Now().Year()) {
-			sp500Sum += sp500Ret
+			vooSum += vooRet
 			qqqSum += qqqRet
+			vtiSum += vtiRet
+			bndSum += bndRet
 			count++
 		}
 
-		fmt.Printf("MRKT   %-8s %-18s %-18s\n", year,
-			fmt.Sprintf("%.2f%%", sp500Ret),
-			fmt.Sprintf("%.2f%%", qqqRet))
+		fmt.Printf("MRKT   %-6s %-10s %-10s %-10s %-10s %-12s\n", year,
+			fmt.Sprintf("%.2f%%", vooRet),
+			fmt.Sprintf("%.2f%%", qqqRet),
+			fmt.Sprintf("%.2f%%", vtiRet),
+			fmt.Sprintf("%.2f%%", bndRet),
+			fmt.Sprintf("%.2f%%", mix6040))
 	}
 
 	if count > 0 {
-		fmt.Println(strings.Repeat("-", 55))
-		fmt.Printf("MRKT   %-8s %-18s %-18s\n", "Average",
-			fmt.Sprintf("%.2f%%", sp500Sum/float64(count)),
-			fmt.Sprintf("%.2f%%", qqqSum/float64(count)))
+		avgMix := (vtiSum/float64(count))*0.6 + (bndSum/float64(count))*0.4
+		fmt.Println(strings.Repeat("-", 68))
+		fmt.Printf("MRKT   %-6s %-10s %-10s %-10s %-10s %-12s\n", "Avg",
+			fmt.Sprintf("%.2f%%", vooSum/float64(count)),
+			fmt.Sprintf("%.2f%%", qqqSum/float64(count)),
+			fmt.Sprintf("%.2f%%", vtiSum/float64(count)),
+			fmt.Sprintf("%.2f%%", bndSum/float64(count)),
+			fmt.Sprintf("%.2f%%", avgMix))
 	}
 }

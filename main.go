@@ -39,8 +39,10 @@ func main() {
 		fmt.Println("Warning: Could not fetch market data:", err)
 		// Continue anyway with empty market data
 		marketData = &MarketData{
-			SP500: make(map[string]float64),
-			QQQ:   make(map[string]float64),
+			VOO: make(map[string]float64),
+			QQQ: make(map[string]float64),
+			VTI: make(map[string]float64),
+			BND: make(map[string]float64),
 		}
 	}
 
@@ -242,21 +244,41 @@ func main() {
 	// Display projections
 	fmt.Println("\n=== Total Expenditure Comparison ===")
 	displayExpenditureTable(downpayment, totalMonths, rentDeposit, include30Year)
+	fmt.Println("\nNote: All recurring costs (insurance, taxes, rent, HOA, etc.) are inflated annually at", inflationRate, "% rate.")
 
 	if loanAmount > 0 {
 		fmt.Println("\n=== Loan Amortization Details ===")
 		displayAmortizationTable(loanAmount, totalMonths, include30Year)
+		fmt.Println("\nNote: Monthly payment is fixed. Each payment covers interest on remaining balance,")
+		fmt.Println("      with the rest going to principal. Early payments are mostly interest.")
 	}
 
 	if includeSelling > 0 {
 		fmt.Println("\n=== Sale Proceeds Analysis ===")
 		displaySaleProceeds(purchasePrice, downpayment, totalMonths,
 			agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax, include30Year)
+		fmt.Println("\nNote: Appreciation rates are applied year-by-year (compounded). If multiple rates are")
+		fmt.Println("      specified (e.g., '-20,-10,-5'), first rate applies to year 1, second to year 2, etc.")
+		fmt.Println("      The last rate applies to all remaining years. Sale price = compounded property value.")
 	}
 
 	fmt.Println("\n=== Net Worth Projections: Buy vs Rent ===")
 	displayComparisonTable(purchasePrice, downpayment, totalMonths,
-		rentDeposit, investmentReturnRate, include30Year)
+		rentDeposit, investmentReturnRate, include30Year, includeSelling,
+		agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax)
+	fmt.Println("\nNote: 'Cumul. Savings' = raw difference in costs (Buying - Renting) without investment growth.")
+	fmt.Println("      See Total Expenditure Comparison.")
+	fmt.Println("      'Market Return' = investment growth using monthly dollar-cost averaging at", investmentReturnRate, "% annual rate.")
+	fmt.Println("      Each month's savings are invested immediately and compounded monthly. This models realistic")
+	fmt.Println("      investing behavior (not lump sum at year start), so effective return < annual rate for short periods.")
+	fmt.Println("      'Renting NW' = Cumul. Savings + Market Return + 75% recoverable deposit.")
+	if includeSelling > 0 {
+		fmt.Println("      'Buying NW' = Net proceeds after selling (sale price - selling costs - loan payoff - taxes).")
+	} else {
+		fmt.Println("      'Buying NW' = Asset value - remaining loan balance.")
+	}
+	fmt.Println("      'RENT - BUY': Positive values mean renting wins, negative values mean buying wins.")
+	fmt.Println()
 }
 
 // getFloatValue gets a float value from currentInputs
@@ -383,8 +405,8 @@ func formatCurrency(amount float64) string {
 
 	// If fullNumbers flag is set, use full format with dollar sign and commas
 	if fullNumbers {
-		// Format with 2 decimal places
-		formatted := fmt.Sprintf("%.2f", amount)
+		// Format with 1 decimal place (automatically rounds)
+		formatted := fmt.Sprintf("%.1f", amount)
 		parts := strings.Split(formatted, ".")
 
 		// Add commas to the integer part
@@ -400,17 +422,17 @@ func formatCurrency(amount float64) string {
 		return fmt.Sprintf("%s$%s.%s", sign, result.String(), parts[1])
 	}
 
-	// Default: compact format with K/M suffixes, no dollar sign
+	// Default: compact format with K/M suffixes, no dollar sign (automatically rounds)
 	var formatted string
 	if amount >= 1000000 {
 		// Millions
-		formatted = fmt.Sprintf("%.2fM", amount/1000000)
+		formatted = fmt.Sprintf("%.1fM", amount/1000000)
 	} else if amount >= 1000 {
 		// Thousands
-		formatted = fmt.Sprintf("%.2fK", amount/1000)
+		formatted = fmt.Sprintf("%.1fK", amount/1000)
 	} else {
 		// Less than 1000
-		formatted = fmt.Sprintf("%.2f", amount)
+		formatted = fmt.Sprintf("%.1f", amount)
 	}
 
 	return sign + formatted
@@ -624,11 +646,11 @@ func displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmoun
 	fmt.Printf("  Investment Return Rate: %.2f%%\n", investmentReturnRate)
 
 	// Display market averages under investment return rate
-	if md != nil && len(md.SP500) > 0 {
-		sp500Avg, qqqAvg := calculateMarketAverages(md)
-		if sp500Avg > 0 {
-			fmt.Printf("    Market Averages (10y): S&P 500 %.1f%%, QQQ %.1f%%, 60/40 Mix %.1f%%\n",
-				sp500Avg, qqqAvg, (sp500Avg*0.6 + qqqAvg*0.4))
+	if md != nil && len(md.VOO) > 0 {
+		vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg := calculateMarketAverages(md)
+		if vooAvg > 0 {
+			fmt.Printf("    Market Averages (10y): VOO %.1f%%, QQQ %.1f%%, VTI %.1f%%, BND %.1f%%, 60/40 %.1f%%\n",
+				vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg)
 		}
 	}
 
@@ -652,8 +674,8 @@ func displayAmortizationTable(loanAmount float64, loanDuration int, include30Yea
 	periods := getPeriods(loanDuration, include30Year > 0)
 
 	// Print table header
-	fmt.Printf("\n%-20s %-20s %-20s %-20s\n", "Period", "Principal Paid", "Interest Paid", "Loan Balance")
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Printf("\n%-12s %-15s %-15s %-15s\n", "Period", "Principal Paid", "Interest Paid", "Loan Balance")
+	fmt.Println(strings.Repeat("-", 57))
 
 	// Print each row
 	for _, period := range periods {
@@ -666,7 +688,7 @@ func displayAmortizationTable(loanAmount float64, loanDuration int, include30Yea
 		interestPaid := cumulativeInterestPaid[monthIndex]
 		loanBalance := remainingLoanBalance[monthIndex]
 
-		fmt.Printf("%-20s %-20s %-20s %-20s\n",
+		fmt.Printf("%-12s %-15s %-15s %-15s\n",
 			"LOAN "+period.label,
 			formatCurrency(principalPaid),
 			formatCurrency(interestPaid),
@@ -681,8 +703,8 @@ func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit 
 	periods := getPeriods(loanDuration, include30Year > 0)
 
 	// Print table header
-	fmt.Printf("\n%-20s %-25s %-25s %-25s\n", "Period", "Buying Expenditure", "Renting Expenditure", "Difference")
-	fmt.Println(strings.Repeat("-", 95))
+	fmt.Printf("\n%-12s %-18s %-18s %-15s\n", "Period", "Buying Expend.", "Renting Expend.", "Difference")
+	fmt.Println(strings.Repeat("-", 63))
 
 	// Print each row
 	for _, period := range periods {
@@ -700,7 +722,7 @@ func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit 
 
 		difference := buyingExpenditure - rentingExpenditure
 
-		fmt.Printf("%-20s %-25s %-25s %-25s\n",
+		fmt.Printf("%-12s %-18s %-18s %-15s\n",
 			"EXP "+period.label,
 			formatCurrency(buyingExpenditure),
 			formatCurrency(rentingExpenditure),
@@ -712,17 +734,19 @@ func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit 
 // displayComparisonTable displays buy vs rent net worth projections side-by-side
 // Uses global monthlyBuyingCosts and monthlyRentingCosts arrays
 func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int,
-	rentDeposit, investmentReturnRate float64, include30Year float64) {
+	rentDeposit, investmentReturnRate float64, include30Year float64, includeSelling float64,
+	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64) {
 	periods := getPeriods(loanDuration, include30Year > 0)
 
 	// Print table header
-	fmt.Printf("\n%-15s %-18s %-18s %-18s %-18s %-18s %-18s\n", "Period", "Asset Value", "Buying Net Worth", "Cumulative Savings", "Market Return", "Renting Net Worth", "RENT - BUY")
-	fmt.Println(strings.Repeat("-", 128))
+	fmt.Printf("\n%-12s %-13s %-12s %-13s %-13s %-12s %-12s\n", "Period", "Asset Value", "Buying NW", "Cumul. Savings", "Market Return", "Renting NW", "RENT - BUY")
+	fmt.Println(strings.Repeat("-", 87))
 
 	// Print each row
 	for _, period := range periods {
 		assetValue, _, buyingNetWorth := calculateNetWorth(
-			period.months, purchasePrice, downpayment,
+			period.months, purchasePrice, downpayment, includeSelling,
+			agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax,
 		)
 
 		rentingNetWorth := calculateRentingNetWorth(
@@ -741,7 +765,7 @@ func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int
 
 		difference := rentingNetWorth - buyingNetWorth
 
-		fmt.Printf("%-15s %-18s %-18s %-18s %-18s %-18s %-18s\n",
+		fmt.Printf("%-12s %-13s %-12s %-13s %-13s %-12s %-12s\n",
 			"NET "+period.label,
 			formatCurrency(assetValue),
 			formatCurrency(buyingNetWorth),
@@ -753,47 +777,76 @@ func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int
 	}
 }
 
+// calculateSaleProceeds calculates the net proceeds from selling at a given time
+func calculateSaleProceeds(months int, purchasePrice float64, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64) (salePrice, totalSellingCosts, loanPayoff, capitalGains, taxOnGains, netProceeds float64) {
+	// Calculate asset value (sale price) by compounding appreciation rates
+	salePrice = purchasePrice
+	years := months / 12
+	remainingMonths := months % 12
+
+	// Apply each year's rate
+	for year := 0; year < years; year++ {
+		rateIndex := year
+		if rateIndex >= len(appreciationRates) {
+			rateIndex = len(appreciationRates) - 1
+		}
+		salePrice *= (1 + appreciationRates[rateIndex]/100)
+	}
+
+	// Apply partial year if there are remaining months
+	if remainingMonths > 0 {
+		rateIndex := years
+		if rateIndex >= len(appreciationRates) {
+			rateIndex = len(appreciationRates) - 1
+		}
+		partialYearFactor := math.Pow(1+appreciationRates[rateIndex]/100, float64(remainingMonths)/12.0)
+		salePrice *= partialYearFactor
+	}
+
+	// Calculate agent commission
+	agentFee := salePrice * (agentCommission / 100)
+
+	// Combine agent commission and staging costs
+	totalSellingCosts = agentFee + stagingCosts
+
+	// Get remaining loan balance
+	monthIndex := months - 1
+	if monthIndex >= len(remainingLoanBalance) {
+		monthIndex = len(remainingLoanBalance) - 1
+	}
+	loanPayoff = remainingLoanBalance[monthIndex]
+
+	// Calculate capital gains
+	capitalGains = salePrice - purchasePrice
+
+	// Calculate taxable gains (after exemption)
+	taxableGains := math.Max(0, capitalGains-taxFreeLimit)
+
+	// Calculate tax on gains
+	taxOnGains = taxableGains * (capitalGainsTax / 100)
+
+	// Calculate net proceeds
+	netProceeds = salePrice - totalSellingCosts - loanPayoff - taxOnGains
+
+	return
+}
+
 // displaySaleProceeds displays the proceeds from selling the property at various periods
 func displaySaleProceeds(purchasePrice, downpayment float64, loanDuration int,
 	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64, include30Year float64) {
 	periods := getPeriods(loanDuration, include30Year > 0)
 
 	// Print table header
-	fmt.Printf("\n%-15s %-18s %-18s %-18s %-18s %-18s %-18s\n",
-		"Period", "Sale Price", "Selling Costs", "Loan Payoff", "Capital Gains", "Tax on Gains", "Net Proceeds")
-	fmt.Println(strings.Repeat("-", 127))
+	fmt.Printf("\n%-12s %-13s %-13s %-13s %-13s %-13s %-13s\n",
+		"Period", "Sale Price", "Selling Cost", "Loan Payoff", "Capital Gain", "Tax on Gain", "Net Proceeds")
+	fmt.Println(strings.Repeat("-", 90))
 
 	// Print each row
 	for _, period := range periods {
-		// Calculate asset value (sale price) using appreciation rates array
-		salePrice, _, _ := calculateNetWorth(period.months, purchasePrice, downpayment)
+		salePrice, totalSellingCosts, loanPayoff, capitalGains, taxOnGains, netProceeds := calculateSaleProceeds(
+			period.months, purchasePrice, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax)
 
-		// Calculate agent commission
-		agentFee := salePrice * (agentCommission / 100)
-
-		// Combine agent commission and staging costs into total selling costs
-		totalSellingCosts := agentFee + stagingCosts
-
-		// Get remaining loan balance
-		monthIndex := period.months - 1
-		if monthIndex >= len(remainingLoanBalance) {
-			monthIndex = len(remainingLoanBalance) - 1
-		}
-		loanPayoff := remainingLoanBalance[monthIndex]
-
-		// Calculate capital gains
-		capitalGains := salePrice - purchasePrice
-
-		// Calculate taxable gains (after exemption)
-		taxableGains := math.Max(0, capitalGains-taxFreeLimit)
-
-		// Calculate tax on gains
-		taxOnGains := taxableGains * (capitalGainsTax / 100)
-
-		// Calculate net proceeds
-		netProceeds := salePrice - totalSellingCosts - loanPayoff - taxOnGains
-
-		fmt.Printf("%-15s %-18s %-18s %-18s %-18s %-18s %-18s\n",
+		fmt.Printf("%-12s %-13s %-13s %-13s %-13s %-13s %-13s\n",
 			"SALE "+period.label,
 			formatCurrency(salePrice),
 			formatCurrency(totalSellingCosts),
@@ -807,7 +860,8 @@ func displaySaleProceeds(purchasePrice, downpayment float64, loanDuration int,
 
 // displayNetWorthTable displays net worth projections in a table format
 // Uses global monthlyBuyingCosts array
-func displayNetWorthTable(purchasePrice, downpayment float64, loanDuration int) {
+func displayNetWorthTable(purchasePrice, downpayment float64, loanDuration int, includeSelling float64,
+	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64) {
 	// Define standard periods
 	standardPeriods := []struct {
 		label  string
@@ -872,7 +926,8 @@ func displayNetWorthTable(purchasePrice, downpayment float64, loanDuration int) 
 	// Print each row
 	for _, period := range periods {
 		assetValue, totalExpenditure, netWorth := calculateNetWorth(
-			period.months, purchasePrice, downpayment,
+			period.months, purchasePrice, downpayment, includeSelling,
+			agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax,
 		)
 
 		fmt.Printf("%-20s %-20s %-20s %-20s\n",
@@ -886,7 +941,8 @@ func displayNetWorthTable(purchasePrice, downpayment float64, loanDuration int) 
 
 // calculateNetWorth calculates the asset value, total expenditure, and net worth for a given time period
 // Uses the global monthlyBuyingCosts and remainingLoanBalance arrays
-func calculateNetWorth(months int, purchasePrice, downpayment float64) (float64, float64, float64) {
+func calculateNetWorth(months int, purchasePrice, downpayment float64, includeSelling float64,
+	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64) (float64, float64, float64) {
 	// Calculate asset value by compounding each year's appreciation rate
 	assetValue := purchasePrice
 	years := months / 12
@@ -917,15 +973,22 @@ func calculateNetWorth(months int, purchasePrice, downpayment float64) (float64,
 		totalExpenditure += monthlyBuyingCosts[i]
 	}
 
-	// Get remaining loan balance at this point
-	monthIndex := months - 1
-	if monthIndex >= len(remainingLoanBalance) {
-		monthIndex = len(remainingLoanBalance) - 1
+	// Calculate net worth
+	var netWorth float64
+	if includeSelling > 0 {
+		// If selling is enabled, use net proceeds after selling costs
+		_, _, _, _, _, netProceeds := calculateSaleProceeds(
+			months, purchasePrice, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax)
+		netWorth = netProceeds
+	} else {
+		// Otherwise, just asset value minus loan balance
+		monthIndex := months - 1
+		if monthIndex >= len(remainingLoanBalance) {
+			monthIndex = len(remainingLoanBalance) - 1
+		}
+		loanBalance := remainingLoanBalance[monthIndex]
+		netWorth = assetValue - loanBalance
 	}
-	loanBalance := remainingLoanBalance[monthIndex]
-
-	// Calculate net worth: asset value minus what you still owe
-	netWorth := assetValue - loanBalance
 
 	return assetValue, totalExpenditure, netWorth
 }

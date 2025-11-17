@@ -269,11 +269,11 @@ func (m FormModel) View() string {
 			b.WriteString("\n")
 
 			// Show market averages after investment return rate field
-			if field.Key == "investment_return_rate" && m.marketData != nil && len(m.marketData.SP500) > 0 {
-				sp500Avg, qqqAvg := calculateMarketAverages(m.marketData)
-				if sp500Avg > 0 {
-					marketInfo := fmt.Sprintf("    Market Averages (10y): S&P 500 %.1f%%, QQQ %.1f%%, 60/40 Mix %.1f%%",
-						sp500Avg, qqqAvg, (sp500Avg*0.6 + qqqAvg*0.4))
+			if field.Key == "investment_return_rate" && m.marketData != nil && len(m.marketData.VOO) > 0 {
+				vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg := calculateMarketAverages(m.marketData)
+				if vooAvg > 0 {
+					marketInfo := fmt.Sprintf("    Market Averages (10y): VOO %.1f%%, QQQ %.1f%%, VTI %.1f%%, BND %.1f%%, 60/40 %.1f%%",
+						vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg)
 					b.WriteString(helpStyle.Render(marketInfo))
 					b.WriteString("\n")
 				}
@@ -292,7 +292,9 @@ func (m FormModel) View() string {
 	// Show help text for current field at the bottom
 	currentField := m.fields[m.currentField]
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("  " + currentField.Help))
+	// Wrap help text at 80 characters with left padding for indentation
+	helpTextStyle := helpStyle.Copy().Width(80).PaddingLeft(2)
+	b.WriteString(helpTextStyle.Render(currentField.Help))
 	b.WriteString("\n\n")
 
 	// Navigation help
