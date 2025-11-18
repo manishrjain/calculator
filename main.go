@@ -245,47 +245,52 @@ func main() {
 	displayMarketData(marketData)
 
 	// Display projections
-	fmt.Println("\n=== Total Expenditure Comparison ===")
+	re := lipgloss.NewRenderer(os.Stdout)
+	titleStyle := re.NewStyle().Foreground(lipgloss.Color("197")).Bold(true) // Monokai pink
+	fmt.Println()
+	fmt.Println(titleStyle.Render("TOTAL EXPENDITURE COMPARISON"))
 	displayExpenditureTable(downpayment, totalMonths, rentDeposit, include30Year)
 
-	// Format note
-	re := lipgloss.NewRenderer(os.Stdout)
-	noteStyle := re.NewStyle().Foreground(lipgloss.Color("240")).Italic(true).MarginTop(1)
+	// Format note with auto-wrapping
+	noteStyle := re.NewStyle().Width(100).Italic(true).Foreground(lipgloss.Color("#C1C0C0")).PaddingLeft(2)
 	fmt.Println(noteStyle.Render(fmt.Sprintf("Note: All recurring costs (insurance, taxes, rent, HOA, etc.) are inflated annually at %.1f%% rate.", inflationRate)))
 
 	if loanAmount > 0 {
-		fmt.Println("\n=== Loan Amortization Details ===")
+		fmt.Println()
+		fmt.Println(titleStyle.Render("LOAN AMORTIZATION DETAILS"))
 		displayAmortizationTable(loanAmount, totalMonths, include30Year)
-		fmt.Println("\nNote: Monthly payment is fixed. Each payment covers interest on remaining balance,")
-		fmt.Println("      with the rest going to principal. Early payments are mostly interest.")
+
+		noteStyle = re.NewStyle().Width(100).Italic(true).Foreground(lipgloss.Color("#C1C0C0")).PaddingLeft(2)
+		fmt.Println(noteStyle.Render("Note: Monthly payment is fixed. Each payment covers interest on remaining balance, with the rest going to principal. Early payments are mostly interest."))
 	}
 
 	if includeSelling > 0 {
-		fmt.Println("\n=== Sale Proceeds Analysis ===")
+		fmt.Println()
+		fmt.Println(titleStyle.Render("SALE PROCEEDS ANALYSIS"))
 		displaySaleProceeds(purchasePrice, downpayment, totalMonths,
 			agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax, include30Year)
-		fmt.Println("\nNote: Appreciation rates are applied year-by-year (compounded). If multiple rates are")
-		fmt.Println("      specified (e.g., '-20,-10,-5'), first rate applies to year 1, second to year 2, etc.")
-		fmt.Println("      The last rate applies to all remaining years. Sale price = compounded property value.")
+
+		noteStyle = re.NewStyle().Width(100).Italic(true).Foreground(lipgloss.Color("#C1C0C0")).PaddingLeft(2)
+		fmt.Println(noteStyle.Render("Note: Appreciation rates are applied year-by-year (compounded). If multiple rates are specified (e.g., '-20,-10,-5'), first rate applies to year 1, second to year 2, etc. The last rate applies to all remaining years. Sale price = compounded property value."))
 	}
 
-	fmt.Println("\n=== Net Worth Projections: Buy vs Rent ===")
+	fmt.Println()
+	fmt.Println(titleStyle.Render("NET WORTH PROJECTIONS: BUY VS RENT"))
 	displayComparisonTable(purchasePrice, downpayment, totalMonths,
 		rentDeposit, investmentReturnRate, include30Year, includeSelling,
 		agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax)
-	fmt.Println("\nNote: 'Cumul. Savings' = raw difference in costs (Buying - Renting) without investment growth.")
-	fmt.Println("      See Total Expenditure Comparison.")
-	fmt.Println("      'Market Return' = investment growth using monthly dollar-cost averaging at", investmentReturnRate, "% annual rate.")
-	fmt.Println("      Each month's savings are invested immediately and compounded monthly. This models realistic")
-	fmt.Println("      investing behavior (not lump sum at year start), so effective return < annual rate for short periods.")
-	fmt.Println("      'Renting NW' = Cumul. Savings + Market Return + 75% recoverable deposit.")
+
+	// Build note text with conditional buying NW explanation
+	noteText := fmt.Sprintf("Note: 'Cumul. Savings' = raw difference in costs (Buying - Renting) without investment growth. See Total Expenditure Comparison.\n\n'Market Return' = investment growth using monthly dollar-cost averaging at %.0f%% annual rate. Each month's savings are invested immediately and compounded monthly. This models realistic investing behavior (not lump sum at year start), so effective return < annual rate for short periods.\n\n'Renting NW' = Cumul. Savings + Market Return + 75%% recoverable deposit. ", investmentReturnRate)
 	if includeSelling > 0 {
-		fmt.Println("      'Buying NW' = Net proceeds after selling (sale price - selling costs - loan payoff - taxes).")
+		noteText += "'Buying NW' = Net proceeds after selling (sale price - selling costs - loan payoff - taxes). "
 	} else {
-		fmt.Println("      'Buying NW' = Asset value - remaining loan balance.")
+		noteText += "'Buying NW' = Asset value - remaining loan balance. "
 	}
-	fmt.Println("      'RENT - BUY': Positive values mean renting wins, negative values mean buying wins.")
-	fmt.Println()
+	noteText += "'RENT - BUY': Positive values mean renting wins, negative values mean buying wins."
+
+	noteStyle = re.NewStyle().Width(100).Italic(true).Foreground(lipgloss.Color("#C1C0C0")).PaddingLeft(2)
+	fmt.Println(noteStyle.Render(noteText))
 }
 
 // getFloatValue gets a float value from currentInputs
@@ -604,7 +609,11 @@ func displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmoun
 	rentDeposit, monthlyRent, annualRentCosts, otherAnnualCosts, investmentReturnRate, totalMonthlyRentingCost,
 	includeSelling, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64, md *MarketData) {
 
-	fmt.Println("\n=== INPUT PARAMETERS ===")
+	re := lipgloss.NewRenderer(os.Stdout)
+	titleStyle := re.NewStyle().Foreground(lipgloss.Color("197")).Bold(true) // Monokai pink
+
+	fmt.Println()
+	fmt.Println(titleStyle.Render("INPUT PARAMETERS"))
 
 	fmt.Println("\nECONOMIC ASSUMPTIONS")
 	fmt.Printf("  Inflation Rate: %.2f%%\n", inflationRate)
@@ -705,7 +714,7 @@ func displayAmortizationTable(loanAmount float64, loanDuration int, include30Yea
 	// Create and style the table
 	re := lipgloss.NewRenderer(os.Stdout)
 
-	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("81")).Bold(true) // Monokai cyan
 	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
 		Light: "240",
 		Dark:  "255",
@@ -734,7 +743,6 @@ func displayAmortizationTable(loanAmount float64, loanDuration int, include30Yea
 			return style
 		})
 
-	fmt.Println()
 	fmt.Println(t)
 }
 
@@ -773,7 +781,7 @@ func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit 
 	// Create and style the table
 	re := lipgloss.NewRenderer(os.Stdout)
 
-	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("81")).Bold(true) // Monokai cyan
 	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
 		Light: "240",
 		Dark:  "255",
@@ -802,7 +810,6 @@ func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit 
 			return style
 		})
 
-	fmt.Println()
 	fmt.Println(t)
 }
 
@@ -853,7 +860,7 @@ func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int
 	// Create and style the table
 	re := lipgloss.NewRenderer(os.Stdout)
 
-	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("81")).Bold(true) // Monokai cyan
 	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
 		Light: "240",
 		Dark:  "255",
@@ -882,7 +889,6 @@ func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int
 			return style
 		})
 
-	fmt.Println()
 	fmt.Println(t)
 }
 
@@ -967,7 +973,7 @@ func displaySaleProceeds(purchasePrice, downpayment float64, loanDuration int,
 	// Create and style the table
 	re := lipgloss.NewRenderer(os.Stdout)
 
-	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("81")).Bold(true) // Monokai cyan
 	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
 		Light: "240",
 		Dark:  "255",
@@ -996,7 +1002,6 @@ func displaySaleProceeds(purchasePrice, downpayment float64, loanDuration int,
 			return style
 		})
 
-	fmt.Println()
 	fmt.Println(t)
 }
 

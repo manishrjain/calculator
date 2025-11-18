@@ -212,11 +212,11 @@ func updateMarketData() (*MarketData, error) {
 	now := time.Now()
 	needsUpdate := false
 
-	// Update if cache is older than 1 day
+	// Update if cache is older than 1 month
 	if md.LastUpdated != "" {
 		lastUpdate, err := time.Parse("2006-01-02", md.LastUpdated)
 		if err == nil {
-			if now.Sub(lastUpdate) > 24*time.Hour {
+			if now.Sub(lastUpdate) > 30*24*time.Hour {
 				needsUpdate = true
 			}
 		}
@@ -330,7 +330,11 @@ func calculateMarketAverages(md *MarketData) (voo, qqq, vti, bnd, mix6040 float6
 
 // displayMarketData shows historical returns and averages
 func displayMarketData(md *MarketData) {
-	fmt.Println("\n=== MARKET DATA ===\n")
+	re := lipgloss.NewRenderer(os.Stdout)
+	titleStyle := re.NewStyle().Foreground(lipgloss.Color("197")).Bold(true) // Monokai pink
+
+	fmt.Println()
+	fmt.Println(titleStyle.Render("MARKET DATA"))
 
 	// Get sorted years
 	years := make([]string, 0)
@@ -388,10 +392,8 @@ func displayMarketData(md *MarketData) {
 		})
 	}
 
-	// Create and style the table
-	re := lipgloss.NewRenderer(os.Stdout)
-
-	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("34")).Bold(true)
+	// Create and style the table (re-use existing renderer from title)
+	headerStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("81")).Bold(true) // Monokai cyan
 	// Use adaptive color: bright white on dark backgrounds, dark gray on light backgrounds
 	rowStyle := re.NewStyle().Padding(0, 1).Foreground(lipgloss.AdaptiveColor{
 		Light: "240", // Dark gray for light backgrounds
