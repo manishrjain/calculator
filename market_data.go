@@ -343,7 +343,7 @@ func displayMarketData(md *MarketData) {
 
 	// Build table rows (header + data)
 	rows := [][]string{
-		{"Period", "VOO", "QQQ", "VTI", "BND", "60/40 Mix"},
+		{"Period", "VOO", "QQQ", "VTI", "BND", "60/40 VTI/BND"},
 	}
 
 	var vooSum, qqqSum, vtiSum, bndSum float64

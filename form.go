@@ -60,8 +60,8 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 		{
 			Name: "BUYING",
 			Fields: []FormField{
-				makeField("purchase_price", "Purchase Price ($)", "Property purchase price", defaults),
-				makeField("downpayment", "Downpayment ($)", "Initial payment amount", defaults),
+				makeField("purchase_price", "Asset Purchase Price ($)", "Initial purchase price of the asset", defaults),
+				makeField("loan_amount", "Loan Amount ($)", "Total mortgage/loan amount", defaults),
 				makeField("loan_rate", "Loan Rate (%)", "Annual interest rate (e.g., 6.5)", defaults),
 				makeField("loan_duration", "Loan Duration", "Loan term (e.g., 5y, 30y)", defaults),
 				makeField("annual_insurance", "Annual Tax & Insurance ($)", "Yearly insurance cost", defaults),

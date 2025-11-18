@@ -28,9 +28,49 @@ var cumulativePrincipalPaid []float64
 var cumulativeInterestPaid []float64
 var appreciationRates []float64 // Annual appreciation rates
 
+// Config holds all input parameters
+type Config struct {
+	// Economic
+	inflationRate float64
+	include30Year float64
+
+	// Buying
+	purchasePrice float64
+	downpayment   float64
+	loanAmount    float64
+	annualRate    float64
+	totalMonths   int
+	monthlyRate   float64
+	monthlyLoanPayment float64
+	annualInsurance float64
+	annualTaxes     float64
+	monthlyExpenses float64
+	totalMonthlyBuyingCost float64
+
+	// Renting
+	rentDeposit            float64
+	monthlyRent            float64
+	annualRentCosts        float64
+	otherAnnualCosts       float64
+	investmentReturnRate   float64
+	totalMonthlyRentingCost float64
+
+	// Selling
+	includeSelling   float64
+	agentCommission  float64
+	stagingCosts     float64
+	taxFreeLimit     float64
+	capitalGainsTax  float64
+}
+
+var config Config
+
 const inputsFile = ".rentobuy_inputs.json"
 
 func main() {
+	// Clear screen
+	// fmt.Print("\033[H\033[2J")
+
 	// Parse command line flags
 	flag.BoolVar(&useDefaults, "defaults", false, "Use all previously saved default values without prompting")
 	flag.BoolVar(&fullNumbers, "full-numbers", false, "Display full numbers instead of compact K/M format")
@@ -87,19 +127,19 @@ func main() {
 	}
 
 	purchasePrice, err := getFloatValue("purchase_price")
-	if err != nil {
-		fmt.Println("Invalid purchase price")
+	if err != nil || purchasePrice == 0 {
+		fmt.Println("Invalid purchase price - cannot be zero")
 		return
 	}
 
-	downpayment, err := getFloatValue("downpayment")
+	loanAmount, err := getFloatValue("loan_amount")
 	if err != nil {
-		fmt.Println("Invalid downpayment")
+		fmt.Println("Invalid loan amount")
 		return
 	}
 
-	// Calculate loan amount
-	loanAmount := purchasePrice - downpayment
+	// Calculate downpayment
+	downpayment := purchasePrice - loanAmount
 
 	var annualRate float64
 	var totalMonths int
@@ -232,33 +272,55 @@ func main() {
 	monthlyRentingExpenses := (annualRentCosts / 12) + (otherAnnualCosts / 12)
 	totalMonthlyRentingCost := monthlyRent + monthlyRentingExpenses
 
+	// Populate global config struct
+	config = Config{
+		inflationRate:              inflationRate,
+		include30Year:              include30Year,
+		purchasePrice:              purchasePrice,
+		downpayment:                downpayment,
+		loanAmount:                 loanAmount,
+		annualRate:                 annualRate,
+		totalMonths:                totalMonths,
+		monthlyRate:                monthlyRate,
+		monthlyLoanPayment:         monthlyLoanPayment,
+		annualInsurance:            annualInsurance,
+		annualTaxes:                annualTaxes,
+		monthlyExpenses:            monthlyExpenses,
+		totalMonthlyBuyingCost:     totalMonthlyBuyingCost,
+		rentDeposit:                rentDeposit,
+		monthlyRent:                monthlyRent,
+		annualRentCosts:            annualRentCosts,
+		otherAnnualCosts:           otherAnnualCosts,
+		investmentReturnRate:       investmentReturnRate,
+		totalMonthlyRentingCost:    totalMonthlyRentingCost,
+		includeSelling:             includeSelling,
+		agentCommission:            agentCommission,
+		stagingCosts:               stagingCosts,
+		taxFreeLimit:               taxFreeLimit,
+		capitalGainsTax:            capitalGainsTax,
+	}
+
 	// Populate global cost arrays for projections (360 months = 30 years max)
 	populateMonthlyCosts(360, monthlyLoanPayment, monthlyRecurringExpenses, totalMonths, totalMonthlyRentingCost, loanAmount, monthlyRate, inflationRate)
 
 	// Display input parameters
-	displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmount, annualRate, totalMonths,
-		annualInsurance, annualTaxes, monthlyExpenses, totalMonthlyBuyingCost,
-		rentDeposit, monthlyRent, annualRentCosts, otherAnnualCosts, investmentReturnRate, totalMonthlyRentingCost,
-		includeSelling, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax, marketData)
+	displayInputParameters(marketData)
 
 	// Display market data after input parameters
 	displayMarketData(marketData)
 
 	// Display projections
-	displayExpenditureTable(downpayment, totalMonths, rentDeposit, include30Year, inflationRate)
+	displayExpenditureTable()
 
-	if loanAmount > 0 {
-		displayAmortizationTable(loanAmount, totalMonths, include30Year)
+	if config.loanAmount > 0 {
+		displayAmortizationTable()
 	}
 
-	if includeSelling > 0 {
-		displaySaleProceeds(purchasePrice, downpayment, totalMonths,
-			agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax, include30Year)
+	if config.includeSelling > 0 {
+		displaySaleProceeds()
 	}
 
-	displayComparisonTable(purchasePrice, downpayment, totalMonths,
-		rentDeposit, investmentReturnRate, include30Year, includeSelling,
-		agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax)
+	displayComparisonTable()
 }
 
 // getFloatValue gets a float value from currentInputs
@@ -618,11 +680,7 @@ func getPeriods(loanDuration int, include30Year bool) []struct {
 }
 
 // displayInputParameters displays all input parameters in grouped format
-func displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmount, annualRate float64, loanDuration int,
-	annualInsurance, annualTaxes, monthlyExpenses, totalMonthlyBuyingCost,
-	rentDeposit, monthlyRent, annualRentCosts, otherAnnualCosts, investmentReturnRate, totalMonthlyRentingCost,
-	includeSelling, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64, md *MarketData) {
-
+func displayInputParameters(md *MarketData) {
 	re := lipgloss.NewRenderer(os.Stdout)
 	titleStyle := re.NewStyle().Foreground(MonokaiPink).Bold(true)
 	labelStyle := re.NewStyle().Foreground(MonokaiCyan)
@@ -633,26 +691,26 @@ func displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmoun
 
 	fmt.Println()
 	fmt.Println(groupStyle.Render("ECONOMIC ASSUMPTIONS"))
-	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Inflation Rate"), inflationRate)
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Inflation Rate"), config.inflationRate)
 
 	fmt.Println()
 	fmt.Println(groupStyle.Render("BUYING"))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Purchase Price"), formatCurrency(purchasePrice))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Downpayment"), formatCurrency(downpayment))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Loan Amount"), formatCurrency(loanAmount))
-	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Loan Rate"), annualRate)
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Asset Purchase Price"), formatCurrency(config.purchasePrice))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Loan Amount"), formatCurrency(config.loanAmount))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Downpayment"), formatCurrency(config.downpayment))
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Loan Rate"), config.annualRate)
 
 	// Format loan duration
 	loanDurationStr := ""
-	if loanDuration%12 == 0 {
-		loanDurationStr = fmt.Sprintf("%dy", loanDuration/12)
+	if config.totalMonths%12 == 0 {
+		loanDurationStr = fmt.Sprintf("%dy", config.totalMonths/12)
 	} else {
-		loanDurationStr = fmt.Sprintf("%d months", loanDuration)
+		loanDurationStr = fmt.Sprintf("%d months", config.totalMonths)
 	}
 	fmt.Printf("  %s: %s\n", labelStyle.Render("Loan Duration"), loanDurationStr)
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Annual Tax & Insurance"), formatCurrency(annualInsurance))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Other Annual Costs"), formatCurrency(annualTaxes))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Monthly Expenses"), formatCurrency(monthlyExpenses))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Annual Tax & Insurance"), formatCurrency(config.annualInsurance))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Other Annual Costs"), formatCurrency(config.annualTaxes))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Monthly Expenses"), formatCurrency(config.monthlyExpenses))
 
 	// Format appreciation rates
 	appreciationRateStr := ""
@@ -670,15 +728,15 @@ func displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmoun
 		appreciationRateStr = strings.Join(rateStrs, ", ")
 	}
 	fmt.Printf("  %s: %s\n", labelStyle.Render("Appreciation Rate"), appreciationRateStr)
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Total Monthly Cost"), formatCurrency(totalMonthlyBuyingCost))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Total Monthly Cost"), formatCurrency(config.totalMonthlyBuyingCost))
 
 	fmt.Println()
 	fmt.Println(groupStyle.Render("RENTING"))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Rental Deposit"), formatCurrency(rentDeposit))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Monthly Rent"), formatCurrency(monthlyRent))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Annual Rent Costs"), formatCurrency(annualRentCosts))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Other Annual Costs"), formatCurrency(otherAnnualCosts))
-	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Investment Return Rate"), investmentReturnRate)
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Rental Deposit"), formatCurrency(config.rentDeposit))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Monthly Rent"), formatCurrency(config.monthlyRent))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Annual Rent Costs"), formatCurrency(config.annualRentCosts))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Other Annual Costs"), formatCurrency(config.otherAnnualCosts))
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Investment Return Rate"), config.investmentReturnRate)
 
 	// Display market averages under investment return rate
 	if md != nil && len(md.VOO) > 0 {
@@ -689,16 +747,16 @@ func displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmoun
 		}
 	}
 
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Total Monthly Cost"), formatCurrency(totalMonthlyRentingCost))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Total Monthly Cost"), formatCurrency(config.totalMonthlyRentingCost))
 
-	if includeSelling > 0 {
+	if config.includeSelling > 0 {
 		fmt.Println()
 		fmt.Println(groupStyle.Render("SELLING"))
 		fmt.Printf("  %s: Yes\n", labelStyle.Render("Include Selling Analysis"))
-		fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Agent Commission"), agentCommission)
-		fmt.Printf("  %s: %s\n", labelStyle.Render("Staging/Selling Costs"), formatCurrency(stagingCosts))
-		fmt.Printf("  %s: %s\n", labelStyle.Render("Tax-Free Gains Limit"), formatCurrency(taxFreeLimit))
-		fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Capital Gains Tax Rate"), capitalGainsTax)
+		fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Agent Commission"), config.agentCommission)
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Staging/Selling Costs"), formatCurrency(config.stagingCosts))
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Tax-Free Gains Limit"), formatCurrency(config.taxFreeLimit))
+		fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Capital Gains Tax Rate"), config.capitalGainsTax)
 	} else {
 		fmt.Println()
 		fmt.Println(groupStyle.Render("SELLING"))
@@ -707,8 +765,8 @@ func displayInputParameters(inflationRate, purchasePrice, downpayment, loanAmoun
 }
 
 // displayAmortizationTable displays loan amortization details
-func displayAmortizationTable(loanAmount float64, loanDuration int, include30Year float64) {
-	periods := getPeriods(loanDuration, include30Year > 0)
+func displayAmortizationTable() {
+	periods := getPeriods(config.totalMonths, config.include30Year > 0)
 
 	// Build table rows (header + data)
 	rows := [][]string{
@@ -740,8 +798,8 @@ func displayAmortizationTable(loanAmount float64, loanDuration int, include30Yea
 
 // displayExpenditureTable displays total expenditure for buying vs renting
 // Uses global monthlyBuyingCosts and monthlyRentingCosts arrays
-func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit float64, include30Year float64, inflationRate float64) {
-	periods := getPeriods(loanDuration, include30Year > 0)
+func displayExpenditureTable() {
+	periods := getPeriods(config.totalMonths, config.include30Year > 0)
 
 	// Build table rows (header + data)
 	rows := [][]string{
@@ -751,13 +809,13 @@ func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit 
 	// Add data rows
 	for _, period := range periods {
 		// Calculate total buying expenditure (downpayment + all monthly costs)
-		buyingExpenditure := downpayment
+		buyingExpenditure := config.downpayment
 		for i := 0; i < period.months; i++ {
 			buyingExpenditure += monthlyBuyingCosts[i]
 		}
 
 		// Calculate total renting expenditure (deposit + all monthly costs)
-		rentingExpenditure := rentDeposit
+		rentingExpenditure := config.rentDeposit
 		for i := 0; i < period.months; i++ {
 			rentingExpenditure += monthlyRentingCosts[i]
 		}
@@ -772,41 +830,34 @@ func displayExpenditureTable(downpayment float64, loanDuration int, rentDeposit 
 		})
 	}
 
-	notes := fmt.Sprintf("Note: All recurring costs (insurance, taxes, rent, HOA, etc.) are inflated annually at %.1f%% rate.", inflationRate)
+	notes := fmt.Sprintf("Note: All recurring costs (insurance, taxes, rent, HOA, etc.) are inflated annually at %.1f%% rate.", config.inflationRate)
 	displayTable("TOTAL EXPENDITURE COMPARISON", rows, notes, false)
 }
 
 // displayComparisonTable displays buy vs rent net worth projections side-by-side
 // Uses global monthlyBuyingCosts and monthlyRentingCosts arrays
-func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int,
-	rentDeposit, investmentReturnRate float64, include30Year float64, includeSelling float64,
-	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64) {
-	periods := getPeriods(loanDuration, include30Year > 0)
+func displayComparisonTable() {
+	periods := getPeriods(config.totalMonths, config.include30Year > 0)
 
 	// Build table rows (header + data)
 	rows := [][]string{
-		{"Period", "Asset Value", "Buying NW", "Cumul. Savings", "Market Return", "Renting NW", "RENT - BUY"},
+		{"Period", "Asset Value", "Buying NW", "Cum Savings", "Market Return", "Renting NW", "RENT - BUY"},
 	}
 
 	// Build each data row
 	for _, period := range periods {
-		assetValue, _, buyingNetWorth := calculateNetWorth(
-			period.months, purchasePrice, downpayment, includeSelling,
-			agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax,
-		)
+		assetValue, _, buyingNetWorth := calculateNetWorth(period.months)
 
-		rentingNetWorth := calculateRentingNetWorth(
-			period.months, downpayment, rentDeposit, investmentReturnRate,
-		)
+		rentingNetWorth := calculateRentingNetWorth(period.months)
 
 		// Calculate cumulative savings (without investment growth)
-		cumulativeSavings := downpayment - rentDeposit
+		cumulativeSavings := config.downpayment - config.rentDeposit
 		for i := 0; i < period.months; i++ {
 			cumulativeSavings += monthlyBuyingCosts[i] - monthlyRentingCosts[i]
 		}
 
 		// Calculate market return (investment growth portion only)
-		recoverableDeposit := rentDeposit * 0.75
+		recoverableDeposit := config.rentDeposit * 0.75
 		marketReturn := rentingNetWorth - cumulativeSavings - recoverableDeposit
 
 		difference := rentingNetWorth - buyingNetWorth
@@ -823,8 +874,8 @@ func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int
 	}
 
 	// Build note text with conditional buying NW explanation
-	noteText := fmt.Sprintf("Note: 'Cumul. Savings' = raw difference in costs (Buying - Renting) without investment growth. See Total Expenditure Comparison.\n\n'Market Return' = investment growth using monthly dollar-cost averaging at %.0f%% annual rate. Each month's savings are invested immediately and compounded monthly. This models realistic investing behavior (not lump sum at year start), so effective return < annual rate for short periods.\n\n'Renting NW' = Cumul. Savings + Market Return + 75%% recoverable deposit. ", investmentReturnRate)
-	if includeSelling > 0 {
+	noteText := fmt.Sprintf("Note: 'Cum Savings' = Cumulative Savings track raw difference in costs (Buying - Renting) without investment growth. See Total Expenditure Comparison.\n\n'Market Return' = investment growth using monthly dollar-cost averaging at %.0f%% annual rate. Each month's savings are invested immediately and compounded monthly. This models realistic investing behavior (not lump sum at year start), so effective return < annual rate for short periods.\n\n'Renting NW' = Cumul. Savings + Market Return + 75%% recoverable deposit. ", config.investmentReturnRate)
+	if config.includeSelling > 0 {
 		noteText += "'Buying NW' = Net proceeds after selling (sale price - selling costs - loan payoff - taxes). "
 	} else {
 		noteText += "'Buying NW' = Asset value - remaining loan balance. "
@@ -835,9 +886,9 @@ func displayComparisonTable(purchasePrice, downpayment float64, loanDuration int
 }
 
 // calculateSaleProceeds calculates the net proceeds from selling at a given time
-func calculateSaleProceeds(months int, purchasePrice float64, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64) (salePrice, totalSellingCosts, loanPayoff, capitalGains, taxOnGains, netProceeds float64) {
+func calculateSaleProceeds(months int) (salePrice, totalSellingCosts, loanPayoff, capitalGains, taxOnGains, netProceeds float64) {
 	// Calculate asset value (sale price) by compounding appreciation rates
-	salePrice = purchasePrice
+	salePrice = config.purchasePrice
 	years := months / 12
 	remainingMonths := months % 12
 
@@ -861,10 +912,10 @@ func calculateSaleProceeds(months int, purchasePrice float64, agentCommission, s
 	}
 
 	// Calculate agent commission
-	agentFee := salePrice * (agentCommission / 100)
+	agentFee := salePrice * (config.agentCommission / 100)
 
 	// Combine agent commission and staging costs
-	totalSellingCosts = agentFee + stagingCosts
+	totalSellingCosts = agentFee + config.stagingCosts
 
 	// Get remaining loan balance
 	monthIndex := months - 1
@@ -874,13 +925,13 @@ func calculateSaleProceeds(months int, purchasePrice float64, agentCommission, s
 	loanPayoff = remainingLoanBalance[monthIndex]
 
 	// Calculate capital gains
-	capitalGains = salePrice - purchasePrice
+	capitalGains = salePrice - config.purchasePrice
 
 	// Calculate taxable gains (after exemption)
-	taxableGains := math.Max(0, capitalGains-taxFreeLimit)
+	taxableGains := math.Max(0, capitalGains-config.taxFreeLimit)
 
 	// Calculate tax on gains
-	taxOnGains = taxableGains * (capitalGainsTax / 100)
+	taxOnGains = taxableGains * (config.capitalGainsTax / 100)
 
 	// Calculate net proceeds
 	netProceeds = salePrice - totalSellingCosts - loanPayoff - taxOnGains
@@ -889,19 +940,17 @@ func calculateSaleProceeds(months int, purchasePrice float64, agentCommission, s
 }
 
 // displaySaleProceeds displays the proceeds from selling the property at various periods
-func displaySaleProceeds(purchasePrice, downpayment float64, loanDuration int,
-	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64, include30Year float64) {
-	periods := getPeriods(loanDuration, include30Year > 0)
+func displaySaleProceeds() {
+	periods := getPeriods(config.totalMonths, config.include30Year > 0)
 
 	// Build table rows (header + data)
 	rows := [][]string{
-		{"Period", "Sale Price", "Selling Cost", "Loan Payoff", "Capital Gain", "Tax on Gain", "Net Proceeds"},
+		{"Period", "Sale Price", "Selling Cost", "Loan Payoff", "Cap Gains", "Tax", "Net Proceeds"},
 	}
 
 	// Build each data row
 	for _, period := range periods {
-		salePrice, totalSellingCosts, loanPayoff, capitalGains, taxOnGains, netProceeds := calculateSaleProceeds(
-			period.months, purchasePrice, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax)
+		salePrice, totalSellingCosts, loanPayoff, capitalGains, taxOnGains, netProceeds := calculateSaleProceeds(period.months)
 
 		rows = append(rows, []string{
 			"SALE " + period.label,
@@ -985,10 +1034,7 @@ func displayNetWorthTable(purchasePrice, downpayment float64, loanDuration int, 
 
 	// Print each row
 	for _, period := range periods {
-		assetValue, totalExpenditure, netWorth := calculateNetWorth(
-			period.months, purchasePrice, downpayment, includeSelling,
-			agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax,
-		)
+		assetValue, totalExpenditure, netWorth := calculateNetWorth(period.months)
 
 		fmt.Printf("%-20s %-20s %-20s %-20s\n",
 			period.label,
@@ -1001,10 +1047,9 @@ func displayNetWorthTable(purchasePrice, downpayment float64, loanDuration int, 
 
 // calculateNetWorth calculates the asset value, total expenditure, and net worth for a given time period
 // Uses the global monthlyBuyingCosts and remainingLoanBalance arrays
-func calculateNetWorth(months int, purchasePrice, downpayment float64, includeSelling float64,
-	agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64) (float64, float64, float64) {
+func calculateNetWorth(months int) (float64, float64, float64) {
 	// Calculate asset value by compounding each year's appreciation rate
-	assetValue := purchasePrice
+	assetValue := config.purchasePrice
 	years := months / 12
 	remainingMonths := months % 12
 
@@ -1028,17 +1073,16 @@ func calculateNetWorth(months int, purchasePrice, downpayment float64, includeSe
 	}
 
 	// Calculate total expenditure by summing monthly costs from array
-	totalExpenditure := downpayment
+	totalExpenditure := config.downpayment
 	for i := 0; i < months; i++ {
 		totalExpenditure += monthlyBuyingCosts[i]
 	}
 
 	// Calculate net worth
 	var netWorth float64
-	if includeSelling > 0 {
+	if config.includeSelling > 0 {
 		// If selling is enabled, use net proceeds after selling costs
-		_, _, _, _, _, netProceeds := calculateSaleProceeds(
-			months, purchasePrice, agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax)
+		_, _, _, _, _, netProceeds := calculateSaleProceeds(months)
 		netWorth = netProceeds
 	} else {
 		// Otherwise, just asset value minus loan balance
@@ -1113,10 +1157,10 @@ func populateMonthlyCosts(maxMonths int, monthlyLoanPayment, monthlyRecurringExp
 
 // calculateRentingNetWorth calculates net worth for the renting scenario
 // Uses month-by-month calculation: investment grows from downpayment + monthly savings
-func calculateRentingNetWorth(months int, downpayment, rentDeposit, investmentReturnRate float64) float64 {
+func calculateRentingNetWorth(months int) float64 {
 	// Start with downpayment minus deposit as initial investment
-	investmentValue := downpayment - rentDeposit
-	monthlyInvestmentRate := investmentReturnRate / 100 / 12
+	investmentValue := config.downpayment - config.rentDeposit
+	monthlyInvestmentRate := config.investmentReturnRate / 100 / 12
 
 	// For each month: calculate savings, add to investment, grow investment
 	for i := 0; i < months; i++ {
@@ -1131,7 +1175,7 @@ func calculateRentingNetWorth(months int, downpayment, rentDeposit, investmentRe
 	}
 
 	// Add back 75% of deposit (recoverable)
-	recoverableDeposit := rentDeposit * 0.75
+	recoverableDeposit := config.rentDeposit * 0.75
 
 	return investmentValue + recoverableDeposit
 }
