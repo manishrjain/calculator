@@ -34,17 +34,18 @@ type Config struct {
 	inflationRate float64
 	include30Year float64
 
-	// Buying
-	purchasePrice float64
-	downpayment   float64
-	loanAmount    float64
-	annualRate    float64
-	totalMonths   int
-	monthlyRate   float64
+	// Buying/Asset
+	purchasePrice      float64 // Original purchase price (for capital gains)
+	currentMarketValue float64 // Current value (for SELL vs KEEP)
+	downpayment        float64
+	loanAmount         float64
+	annualRate         float64
+	totalMonths        int
+	monthlyRate        float64
 	monthlyLoanPayment float64
-	annualInsurance float64
-	annualTaxes     float64
-	monthlyExpenses float64
+	annualInsurance    float64
+	annualTaxes        float64
+	monthlyExpenses    float64
 	totalMonthlyBuyingCost float64
 
 	// Renting
@@ -113,195 +114,225 @@ func main() {
 		currentInputs = savedDefaults
 	}
 
-	// Parse all inputs from currentInputs
-	inflationRate, err := getFloatValue("inflation_rate")
+	// Determine which scenario is selected
+	scenarioSellVsKeep, _ := getFloatValue("scenario_sell_vs_keep")
+	isSellVsKeep := scenarioSellVsKeep > 0
+
+	// Parse configuration for the selected scenario
+	err = parseConfig(isSellVsKeep)
 	if err != nil {
-		fmt.Println("Invalid inflation rate")
+		fmt.Println("Error parsing inputs:", err)
 		return
 	}
 
-	// Get 30-year projection toggle
-	include30Year, err := getFloatValue("include_30year")
-	if err != nil {
-		include30Year = 0 // Default to 10-year projections only
-	}
-
-	purchasePrice, err := getFloatValue("purchase_price")
-	if err != nil || purchasePrice == 0 {
-		fmt.Println("Invalid purchase price - cannot be zero")
-		return
-	}
-
-	loanAmount, err := getFloatValue("loan_amount")
-	if err != nil {
-		fmt.Println("Invalid loan amount")
-		return
-	}
-
-	// Calculate downpayment
-	downpayment := purchasePrice - loanAmount
-
-	var annualRate float64
-	var totalMonths int
-	var monthlyRate float64
-	var monthlyLoanPayment float64
-
-	if loanAmount <= 0 {
-		fmt.Println("\nNo loan needed. Purchase can be made with downpayment.")
-		annualRate = 0
-		totalMonths = 0
-		monthlyRate = 0
-		monthlyLoanPayment = 0
+	// Route to the appropriate scenario
+	if isSellVsKeep {
+		runSellVsKeepScenario(marketData)
 	} else {
-		// Get loan rate
-		annualRate, err = getFloatValue("loan_rate")
-		if err != nil {
-			fmt.Println("Invalid loan rate")
-			return
-		}
-
-		// Get loan duration
-		totalMonths, err = getIntValue("loan_term", parseDuration)
-		if err != nil {
-			fmt.Println("Invalid duration format:", err)
-			return
-		}
-
-		// Calculate monthly payment for buying
-		monthlyRate = annualRate / 100 / 12
-		monthlyLoanPayment = calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths)
+		runBuyVsRentScenario(marketData)
 	}
+}
 
-	// Get all remaining values
-	annualInsurance, err := getFloatValue("annual_insurance")
+// parseConfig parses all input fields into the global config struct
+func parseConfig(isSellVsKeep bool) error {
+	var err error
+
+	// === COMMON FIELDS (always parsed) ===
+
+	// Economic assumptions
+	config.inflationRate, err = getFloatValue("inflation_rate")
 	if err != nil {
-		fmt.Println("Invalid insurance amount")
-		return
+		return fmt.Errorf("invalid inflation rate: %v", err)
 	}
 
-	annualTaxes, err := getFloatValue("annual_taxes")
+	config.include30Year, err = getFloatValue("include_30year")
 	if err != nil {
-		fmt.Println("Invalid taxes amount")
-		return
+		config.include30Year = 0 // Default to 10-year projections only
 	}
 
-	totalAnnualExpenses := annualInsurance + annualTaxes
-
-	monthlyExpenses, err := getFloatValue("monthly_expenses")
+	// Ongoing costs (shared across scenarios)
+	config.annualInsurance, err = getFloatValue("annual_insurance")
 	if err != nil {
-		fmt.Println("Invalid monthly expenses")
-		return
+		return fmt.Errorf("invalid annual insurance: %v", err)
 	}
 
-	// Parse appreciation rates (comma-separated)
+	config.annualTaxes, err = getFloatValue("annual_taxes")
+	if err != nil {
+		return fmt.Errorf("invalid annual taxes: %v", err)
+	}
+
+	config.monthlyExpenses, err = getFloatValue("monthly_expenses")
+	if err != nil {
+		return fmt.Errorf("invalid monthly expenses: %v", err)
+	}
+
+	// Appreciation rate (shared)
 	appreciationRateStr := currentInputs["appreciation_rate"]
 	appreciationRates, err = parseAppreciationRates(appreciationRateStr)
 	if err != nil {
-		fmt.Println("Invalid appreciation rate:", err)
-		return
+		return fmt.Errorf("invalid appreciation rate: %v", err)
 	}
 
-	rentDeposit, err := getFloatValue("rent_deposit")
+	// Rental fields (always parsed)
+	config.rentDeposit, err = getFloatValue("rent_deposit")
 	if err != nil {
-		fmt.Println("Invalid deposit amount")
-		return
+		return fmt.Errorf("invalid rental deposit: %v", err)
 	}
 
-	monthlyRent, err := getFloatValue("monthly_rent")
+	config.monthlyRent, err = getFloatValue("monthly_rent")
 	if err != nil {
-		fmt.Println("Invalid monthly rent")
-		return
+		return fmt.Errorf("invalid monthly rent: %v", err)
 	}
 
-	annualRentCosts, err := getFloatValue("annual_rent_costs")
+	config.annualRentCosts, err = getFloatValue("annual_rent_costs")
 	if err != nil {
-		fmt.Println("Invalid annual rent costs")
-		return
+		return fmt.Errorf("invalid annual rent costs: %v", err)
 	}
 
-	otherAnnualCosts, err := getFloatValue("other_annual_costs")
+	config.otherAnnualCosts, err = getFloatValue("other_annual_costs")
 	if err != nil {
-		fmt.Println("Invalid other annual costs")
-		return
+		return fmt.Errorf("invalid other annual costs: %v", err)
 	}
 
-	investmentReturnRate, err := getFloatValue("investment_return_rate")
+	config.investmentReturnRate, err = getFloatValue("investment_return_rate")
 	if err != nil {
-		fmt.Println("Invalid investment return rate")
-		return
+		return fmt.Errorf("invalid investment return rate: %v", err)
 	}
 
-	// Get selling analysis parameters
-	includeSelling, err := getFloatValue("include_selling")
+	// Selling parameters (always parsed - used differently in each scenario)
+	config.includeSelling, err = getFloatValue("include_selling")
 	if err != nil {
-		includeSelling = 0 // Default to not including selling analysis
+		config.includeSelling = 0
 	}
 
-	var agentCommission, stagingCosts, taxFreeLimit, capitalGainsTax float64
-	if includeSelling > 0 {
-		agentCommission, err = getFloatValue("agent_commission")
-		if err != nil {
-			fmt.Println("Invalid agent commission")
-			return
+	config.agentCommission, err = getFloatValue("agent_commission")
+	if err != nil {
+		config.agentCommission = 0
+	}
+
+	config.stagingCosts, err = getFloatValue("staging_costs")
+	if err != nil {
+		config.stagingCosts = 0
+	}
+
+	config.taxFreeLimit, err = getFloatValue("tax_free_limit")
+	if err != nil {
+		config.taxFreeLimit = 0
+	}
+
+	config.capitalGainsTax, err = getFloatValue("capital_gains_tax")
+	if err != nil {
+		config.capitalGainsTax = 0
+	}
+
+	// === SCENARIO-SPECIFIC FIELDS ===
+
+	config.purchasePrice, err = getFloatValue("purchase_price")
+	if err != nil || config.purchasePrice == 0 {
+		return fmt.Errorf("invalid purchase price - cannot be zero")
+	}
+
+	config.loanAmount, err = getFloatValue("loan_amount")
+	if err != nil {
+		return fmt.Errorf("invalid loan amount: %v", err)
+	}
+
+	if isSellVsKeep {
+		// SELL vs KEEP specific parsing
+		config.currentMarketValue, err = getFloatValue("current_market_value")
+		if err != nil || config.currentMarketValue == 0 {
+			return fmt.Errorf("invalid current market value - cannot be zero")
 		}
 
-		stagingCosts, err = getFloatValue("staging_costs")
-		if err != nil {
-			fmt.Println("Invalid staging costs")
-			return
-		}
+		// For SELL vs KEEP, we calculate remaining loan balance from loan parameters
+		if config.loanAmount > 0 {
+			// Get loan parameters
+			config.annualRate, err = getFloatValue("loan_rate")
+			if err != nil {
+				return fmt.Errorf("invalid loan rate: %v", err)
+			}
 
-		taxFreeLimit, err = getFloatValue("tax_free_limit")
-		if err != nil {
-			fmt.Println("Invalid tax-free limit")
-			return
-		}
+			// Get original loan term
+			originalLoanMonths, err := getIntValue("loan_term", parseDuration)
+			if err != nil {
+				return fmt.Errorf("invalid loan term: %v", err)
+			}
 
-		capitalGainsTax, err = getFloatValue("capital_gains_tax")
-		if err != nil {
-			fmt.Println("Invalid capital gains tax rate")
-			return
+			// Get remaining loan term
+			remainingLoanMonths, err := getIntValue("remaining_loan_term", parseDuration)
+			if err != nil {
+				return fmt.Errorf("invalid remaining loan term: %v", err)
+			}
+
+			// Calculate monthly rate and payment based on original loan
+			config.monthlyRate = config.annualRate / 100 / 12
+			originalPayment := calculateMonthlyPayment(config.loanAmount, config.monthlyRate, originalLoanMonths)
+
+			// Calculate remaining loan balance by simulating payments up to current point
+			monthsElapsed := originalLoanMonths - remainingLoanMonths
+			remainingBalance := config.loanAmount
+			for i := 0; i < monthsElapsed; i++ {
+				interestPayment := remainingBalance * config.monthlyRate
+				principalPayment := originalPayment - interestPayment
+				remainingBalance -= principalPayment
+			}
+
+			// For projections: use remaining term and recalculate payment on remaining balance
+			config.totalMonths = remainingLoanMonths
+			config.monthlyLoanPayment = calculateMonthlyPayment(remainingBalance, config.monthlyRate, remainingLoanMonths)
+			config.downpayment = config.currentMarketValue - remainingBalance // Current equity
+			config.loanAmount = remainingBalance // Update to remaining balance
+		} else {
+			// No loan - fully paid off
+			config.annualRate = 0
+			config.totalMonths = 0
+			config.monthlyRate = 0
+			config.monthlyLoanPayment = 0
+			config.downpayment = config.currentMarketValue // Full equity
+			config.loanAmount = 0
+		}
+	} else {
+		// BUY vs RENT specific parsing
+		config.downpayment = config.purchasePrice - config.loanAmount
+
+		if config.loanAmount > 0 {
+			config.annualRate, err = getFloatValue("loan_rate")
+			if err != nil {
+				return fmt.Errorf("invalid loan rate: %v", err)
+			}
+
+			config.totalMonths, err = getIntValue("loan_term", parseDuration)
+			if err != nil {
+				return fmt.Errorf("invalid loan term: %v", err)
+			}
+
+			config.monthlyRate = config.annualRate / 100 / 12
+			config.monthlyLoanPayment = calculateMonthlyPayment(config.loanAmount, config.monthlyRate, config.totalMonths)
+		} else {
+			config.annualRate = 0
+			config.totalMonths = 0
+			config.monthlyRate = 0
+			config.monthlyLoanPayment = 0
 		}
 	}
 
-	// Calculate monthly recurring expenses
-	monthlyRecurringExpenses := (totalAnnualExpenses / 12) + monthlyExpenses
-	totalMonthlyBuyingCost := monthlyLoanPayment + monthlyRecurringExpenses
+	// Calculate derived monthly costs
+	totalAnnualExpenses := config.annualInsurance + config.annualTaxes
+	monthlyRecurringExpenses := (totalAnnualExpenses / 12) + config.monthlyExpenses
+	config.totalMonthlyBuyingCost = config.monthlyLoanPayment + monthlyRecurringExpenses
 
-	// Calculate monthly cost for renting
-	monthlyRentingExpenses := (annualRentCosts / 12) + (otherAnnualCosts / 12)
-	totalMonthlyRentingCost := monthlyRent + monthlyRentingExpenses
+	monthlyRentingExpenses := (config.annualRentCosts / 12) + (config.otherAnnualCosts / 12)
+	config.totalMonthlyRentingCost = config.monthlyRent + monthlyRentingExpenses
 
-	// Populate global config struct
-	config = Config{
-		inflationRate:              inflationRate,
-		include30Year:              include30Year,
-		purchasePrice:              purchasePrice,
-		downpayment:                downpayment,
-		loanAmount:                 loanAmount,
-		annualRate:                 annualRate,
-		totalMonths:                totalMonths,
-		monthlyRate:                monthlyRate,
-		monthlyLoanPayment:         monthlyLoanPayment,
-		annualInsurance:            annualInsurance,
-		annualTaxes:                annualTaxes,
-		monthlyExpenses:            monthlyExpenses,
-		totalMonthlyBuyingCost:     totalMonthlyBuyingCost,
-		rentDeposit:                rentDeposit,
-		monthlyRent:                monthlyRent,
-		annualRentCosts:            annualRentCosts,
-		otherAnnualCosts:           otherAnnualCosts,
-		investmentReturnRate:       investmentReturnRate,
-		totalMonthlyRentingCost:    totalMonthlyRentingCost,
-		includeSelling:             includeSelling,
-		agentCommission:            agentCommission,
-		stagingCosts:               stagingCosts,
-		taxFreeLimit:               taxFreeLimit,
-		capitalGainsTax:            capitalGainsTax,
-	}
+	return nil
+}
 
-	// Populate global cost arrays for projections (360 months = 30 years max)
-	populateMonthlyCosts(360, monthlyLoanPayment, monthlyRecurringExpenses, totalMonths, totalMonthlyRentingCost, loanAmount, monthlyRate, inflationRate)
+// runBuyVsRentScenario handles the BUY vs RENT scenario calculations and display
+func runBuyVsRentScenario(marketData *MarketData) {
+	// All configuration is already parsed in config global variable
+
+	// Populate global cost arrays for projections
+	populateMonthlyCosts()
 
 	// Display input parameters
 	displayInputParameters(marketData)
@@ -321,6 +352,27 @@ func main() {
 	}
 
 	displayComparisonTable()
+}
+
+// runSellVsKeepScenario handles the SELL vs KEEP scenario calculations and display
+func runSellVsKeepScenario(marketData *MarketData) {
+	// All configuration is already parsed in config global variable
+	// config.purchasePrice = original purchase price (for capital gains)
+	// config.currentMarketValue = current market value
+	// config.loanAmount = remaining loan balance (calculated in parseConfig)
+	// config.downpayment = current equity (currentMarketValue - loanAmount)
+
+	// Populate global cost arrays for KEEP scenario (continuing to own)
+	populateMonthlyCosts()
+
+	// Display input parameters
+	displayInputParametersSellVsKeep(marketData)
+
+	// Display market data
+	displayMarketData(marketData)
+
+	// Display projections
+	displaySellVsKeepComparison()
 }
 
 // getFloatValue gets a float value from currentInputs
@@ -1098,42 +1150,49 @@ func calculateNetWorth(months int) (float64, float64, float64) {
 }
 
 // populateMonthlyCosts fills global arrays with monthly costs for buying and renting
-func populateMonthlyCosts(maxMonths int, monthlyLoanPayment, monthlyRecurringExpenses float64, loanDuration int, monthlyRentingCost, loanAmount, monthlyRate, inflationRate float64) {
+// Uses global config struct for all parameters
+func populateMonthlyCosts() {
+	maxMonths := 360 // 30 years maximum projection
+
 	monthlyBuyingCosts = make([]float64, maxMonths)
 	monthlyRentingCosts = make([]float64, maxMonths)
 	remainingLoanBalance = make([]float64, maxMonths)
 	cumulativePrincipalPaid = make([]float64, maxMonths)
 	cumulativeInterestPaid = make([]float64, maxMonths)
 
+	// Calculate monthly recurring expenses from config
+	totalAnnualExpenses := config.annualInsurance + config.annualTaxes
+	monthlyRecurringExpenses := (totalAnnualExpenses / 12) + config.monthlyExpenses
+
 	// Calculate current rental cost with annual increases
-	currentRentingCost := monthlyRentingCost
+	currentRentingCost := config.totalMonthlyRentingCost
 
 	// Track current recurring expenses (will increase with inflation)
 	currentRecurringExpenses := monthlyRecurringExpenses
 
 	// Track remaining loan balance
-	currentBalance := loanAmount
+	currentBalance := config.loanAmount
 	totalPrincipalPaid := 0.0
 	totalInterestPaid := 0.0
 
 	for i := 0; i < maxMonths; i++ {
 		// Apply inflation to all costs at the start of each year (except the first month)
 		if i > 0 && i%12 == 0 {
-			currentRentingCost *= (1 + inflationRate/100)
-			currentRecurringExpenses *= (1 + inflationRate/100)
+			currentRentingCost *= (1 + config.inflationRate/100)
+			currentRecurringExpenses *= (1 + config.inflationRate/100)
 		}
 
 		// Set renting cost for this month
 		monthlyRentingCosts[i] = currentRentingCost
 
 		// Buying cost: loan payment stops after loan duration, but recurring expenses continue
-		if i < loanDuration {
-			monthlyBuyingCosts[i] = monthlyLoanPayment + currentRecurringExpenses
+		if i < config.totalMonths {
+			monthlyBuyingCosts[i] = config.monthlyLoanPayment + currentRecurringExpenses
 
 			// Calculate interest for this month
-			interestPayment := currentBalance * monthlyRate
+			interestPayment := currentBalance * config.monthlyRate
 			// Principal payment is the remainder
-			principalPayment := monthlyLoanPayment - interestPayment
+			principalPayment := config.monthlyLoanPayment - interestPayment
 			// Reduce the balance
 			currentBalance -= principalPayment
 
@@ -1178,4 +1237,245 @@ func calculateRentingNetWorth(months int) float64 {
 	recoverableDeposit := config.rentDeposit * 0.75
 
 	return investmentValue + recoverableDeposit
+}
+
+// displayInputParametersSellVsKeep displays input parameters for SELL vs KEEP scenario
+func displayInputParametersSellVsKeep(md *MarketData) {
+	re := lipgloss.NewRenderer(os.Stdout)
+	titleStyle := re.NewStyle().Foreground(MonokaiPink).Bold(true)
+	labelStyle := re.NewStyle().Foreground(MonokaiCyan)
+	groupStyle := re.NewStyle().Foreground(MonokaiOrange).Bold(true)
+
+	fmt.Println()
+	fmt.Println(titleStyle.Render("INPUT PARAMETERS - SELL VS KEEP"))
+
+	fmt.Println()
+	fmt.Println(groupStyle.Render("ECONOMIC ASSUMPTIONS"))
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Inflation Rate"), config.inflationRate)
+
+	fmt.Println()
+	fmt.Println(groupStyle.Render("ASSET"))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Original Purchase Price"), formatCurrency(config.purchasePrice))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Current Market Value"), formatCurrency(config.currentMarketValue))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Current Equity"), formatCurrency(config.downpayment))
+
+	if config.loanAmount > 0 {
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Remaining Loan Balance"), formatCurrency(config.loanAmount))
+		fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Loan Rate"), config.annualRate)
+		loanDurationStr := ""
+		if config.totalMonths%12 == 0 {
+			loanDurationStr = fmt.Sprintf("%dy", config.totalMonths/12)
+		} else {
+			loanDurationStr = fmt.Sprintf("%d months", config.totalMonths)
+		}
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Remaining Loan Term"), loanDurationStr)
+	} else {
+		fmt.Printf("  %s: Fully paid off\n", labelStyle.Render("Loan Status"))
+	}
+
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Annual Tax & Insurance"), formatCurrency(config.annualInsurance))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Other Annual Costs"), formatCurrency(config.annualTaxes))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Monthly Expenses"), formatCurrency(config.monthlyExpenses))
+
+	// Format appreciation rates
+	appreciationRateStr := ""
+	if len(appreciationRates) == 1 {
+		appreciationRateStr = fmt.Sprintf("%.2f%% (all years)", appreciationRates[0])
+	} else {
+		rateStrs := make([]string, len(appreciationRates))
+		for i, rate := range appreciationRates {
+			if i == len(appreciationRates)-1 {
+				rateStrs[i] = fmt.Sprintf("%.2f%% (year %d+)", rate, i+1)
+			} else {
+				rateStrs[i] = fmt.Sprintf("%.2f%% (year %d)", rate, i+1)
+			}
+		}
+		appreciationRateStr = strings.Join(rateStrs, ", ")
+	}
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Appreciation Rate (if keeping)"), appreciationRateStr)
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Total Monthly Cost (if keeping)"), formatCurrency(config.totalMonthlyBuyingCost))
+
+	fmt.Println()
+	fmt.Println(groupStyle.Render("INVESTING (if selling)"))
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Investment Return Rate"), config.investmentReturnRate)
+
+	// Display market averages under investment return rate
+	if md != nil && len(md.VOO) > 0 {
+		vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg := calculateMarketAverages(md)
+		if vooAvg > 0 {
+			fmt.Printf("    Market Averages (10y): VOO %.1f%%, QQQ %.1f%%, VTI %.1f%%, BND %.1f%%, 60/40 %.1f%%\n",
+				vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg)
+		}
+	}
+
+	// Check if renting analysis is included
+	includeRenting, _ := getFloatValue("include_renting_sell")
+	if includeRenting > 0 {
+		fmt.Printf("  %s: Yes\n", labelStyle.Render("Include Renting Analysis"))
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Rental Deposit"), formatCurrency(config.rentDeposit))
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Monthly Rent"), formatCurrency(config.monthlyRent))
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Annual Rent Costs"), formatCurrency(config.annualRentCosts))
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Total Monthly Renting Cost"), formatCurrency(config.totalMonthlyRentingCost))
+	} else {
+		fmt.Printf("  %s: No\n", labelStyle.Render("Include Renting Analysis"))
+	}
+
+	fmt.Println()
+	fmt.Println(groupStyle.Render("SELLING COSTS"))
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Agent Commission"), config.agentCommission)
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Staging/Selling Costs"), formatCurrency(config.stagingCosts))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Tax-Free Gains Limit"), formatCurrency(config.taxFreeLimit))
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Capital Gains Tax Rate"), config.capitalGainsTax)
+}
+
+// calculateSellNetWorth calculates net worth if selling at month 0 and investing proceeds
+func calculateSellNetWorth(months int) float64 {
+	// Calculate net proceeds from selling now
+	salePrice := config.currentMarketValue
+	agentFee := salePrice * (config.agentCommission / 100)
+	totalSellingCosts := agentFee + config.stagingCosts
+	loanPayoff := config.loanAmount
+	capitalGains := salePrice - config.purchasePrice
+	taxableGains := math.Max(0, capitalGains-config.taxFreeLimit)
+	taxOnGains := taxableGains * (config.capitalGainsTax / 100)
+	netProceeds := salePrice - totalSellingCosts - loanPayoff - taxOnGains
+
+	// Check if we need to account for renting
+	includeRenting, _ := getFloatValue("include_renting_sell")
+
+	if includeRenting > 0 {
+		// Start investment with net proceeds minus rental deposit
+		investmentValue := netProceeds - config.rentDeposit
+		monthlyInvestmentRate := config.investmentReturnRate / 100 / 12
+
+		// For each month: subtract rental costs, grow investment
+		for i := 0; i < months; i++ {
+			// Subtract renting costs
+			investmentValue -= monthlyRentingCosts[i]
+
+			// Apply monthly growth
+			investmentValue *= (1 + monthlyInvestmentRate)
+		}
+
+		// Add back 75% of rental deposit (recoverable)
+		recoverableDeposit := config.rentDeposit * 0.75
+		return investmentValue + recoverableDeposit
+	} else {
+		// Just invest the proceeds without rental costs
+		investmentValue := netProceeds
+		monthlyInvestmentRate := config.investmentReturnRate / 100 / 12
+
+		// Simple monthly compounding
+		for i := 0; i < months; i++ {
+			investmentValue *= (1 + monthlyInvestmentRate)
+		}
+
+		return investmentValue
+	}
+}
+
+// calculateKeepNetWorth calculates net worth if keeping the asset
+func calculateKeepNetWorth(months int) float64 {
+	// Calculate asset value starting from current market value
+	assetValue := config.currentMarketValue
+	years := months / 12
+	remainingMonths := months % 12
+
+	// Apply each year's appreciation rate
+	for year := 0; year < years; year++ {
+		rateIndex := year
+		if rateIndex >= len(appreciationRates) {
+			rateIndex = len(appreciationRates) - 1
+		}
+		assetValue *= (1 + appreciationRates[rateIndex]/100)
+	}
+
+	// Apply partial year if there are remaining months
+	if remainingMonths > 0 {
+		rateIndex := years
+		if rateIndex >= len(appreciationRates) {
+			rateIndex = len(appreciationRates) - 1
+		}
+		partialYearFactor := math.Pow(1+appreciationRates[rateIndex]/100, float64(remainingMonths)/12.0)
+		assetValue *= partialYearFactor
+	}
+
+	// Get remaining loan balance after this period
+	monthIndex := months - 1
+	if monthIndex >= len(remainingLoanBalance) {
+		monthIndex = len(remainingLoanBalance) - 1
+	}
+	loanBalance := remainingLoanBalance[monthIndex]
+
+	// Net worth = asset value - loan balance
+	return assetValue - loanBalance
+}
+
+// displaySellVsKeepComparison displays the comparison table for SELL vs KEEP
+func displaySellVsKeepComparison() {
+	periods := getPeriods(config.totalMonths, config.include30Year > 0)
+
+	// Build table rows
+	rows := [][]string{
+		{"Period", "SELL Net Worth", "KEEP Asset Value", "KEEP Loan Balance", "KEEP Net Worth", "KEEP - SELL"},
+	}
+
+	// Build each data row
+	for _, period := range periods {
+		sellNetWorth := calculateSellNetWorth(period.months)
+		keepNetWorth := calculateKeepNetWorth(period.months)
+
+		// Calculate asset value for KEEP
+		assetValue := config.currentMarketValue
+		years := period.months / 12
+		remainingMonths := period.months % 12
+
+		for year := 0; year < years; year++ {
+			rateIndex := year
+			if rateIndex >= len(appreciationRates) {
+				rateIndex = len(appreciationRates) - 1
+			}
+			assetValue *= (1 + appreciationRates[rateIndex]/100)
+		}
+
+		if remainingMonths > 0 {
+			rateIndex := years
+			if rateIndex >= len(appreciationRates) {
+				rateIndex = len(appreciationRates) - 1
+			}
+			partialYearFactor := math.Pow(1+appreciationRates[rateIndex]/100, float64(remainingMonths)/12.0)
+			assetValue *= partialYearFactor
+		}
+
+		// Get remaining loan balance
+		monthIndex := period.months - 1
+		if monthIndex >= len(remainingLoanBalance) {
+			monthIndex = len(remainingLoanBalance) - 1
+		}
+		loanBalance := remainingLoanBalance[monthIndex]
+
+		difference := keepNetWorth - sellNetWorth
+
+		rows = append(rows, []string{
+			"NET " + period.label,
+			formatCurrency(sellNetWorth),
+			formatCurrency(assetValue),
+			formatCurrency(loanBalance),
+			formatCurrency(keepNetWorth),
+			formatCurrency(difference),
+		})
+	}
+
+	// Build note text
+	includeRenting, _ := getFloatValue("include_renting_sell")
+	noteText := ""
+	if includeRenting > 0 {
+		noteText = fmt.Sprintf("Note: 'SELL Net Worth' = Net proceeds from selling today (sale price - selling costs - loan payoff - capital gains tax) invested at %.0f%% return, minus rental costs (inflated annually at %.1f%%). Recovers 75%% of rental deposit.\n\n", config.investmentReturnRate, config.inflationRate)
+	} else {
+		noteText = fmt.Sprintf("Note: 'SELL Net Worth' = Net proceeds from selling today (sale price - selling costs - loan payoff - capital gains tax) invested at %.0f%% return with monthly compounding.\n\n", config.investmentReturnRate)
+	}
+	noteText += "'KEEP Net Worth' = Future asset value (with appreciation) minus remaining loan balance. Asset continues to appreciate, loan gets paid down over time.\n\n"
+	noteText += "'KEEP - SELL': Positive values mean keeping wins, negative values mean selling wins."
+
+	displayTable("NET WORTH PROJECTIONS: SELL VS KEEP", rows, noteText, false)
 }

@@ -96,7 +96,7 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 			Fields: []FormField{
 				makeField("purchase_price", "Asset Purchase Price ($)", "What you originally paid for the asset (for capital gains)", defaults),
 				makeField("current_market_value", "Current Market Value ($)", "What the asset is worth today", defaults),
-				makeField("remaining_loan_amount", "Remaining Loan Amount ($)", "Current outstanding loan balance", defaults),
+				makeField("loan_amount", "Original Loan Amount ($)", "The original loan amount when purchased (we'll calculate remaining balance)", defaults),
 				makeField("loan_rate", "Loan Rate (%)", "Annual interest rate on existing loan", defaults),
 				makeField("loan_term", "Loan Term", "Original loan duration when started (e.g., 30y)", defaults),
 				makeField("remaining_loan_term", "Remaining Loan Term", "Time left on loan (e.g., 25y)", defaults),
