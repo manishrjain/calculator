@@ -27,6 +27,7 @@ var remainingLoanBalance []float64
 var cumulativePrincipalPaid []float64
 var cumulativeInterestPaid []float64
 var appreciationRates []float64 // Annual appreciation rates
+var taxFreeLimits []float64     // Tax-free capital gains limits by year
 
 // Config holds all input parameters
 type Config struct {
@@ -57,11 +58,10 @@ type Config struct {
 	totalMonthlyRentingCost float64
 
 	// Selling
-	includeSelling   float64
-	agentCommission  float64
-	stagingCosts     float64
-	taxFreeLimit     float64
-	capitalGainsTax  float64
+	includeSelling  float64
+	agentCommission float64
+	stagingCosts    float64
+	capitalGainsTax float64
 }
 
 var config Config
@@ -215,9 +215,11 @@ func parseConfig(isSellVsKeep bool) error {
 		config.stagingCosts = 0
 	}
 
-	config.taxFreeLimit, err = getFloatValue("tax_free_limit")
+	// Parse tax-free limits as comma-separated values (like appreciation rates)
+	taxFreeLimitStr := currentInputs["tax_free_limit"]
+	taxFreeLimits, err = parseAppreciationRates(taxFreeLimitStr)
 	if err != nil {
-		config.taxFreeLimit = 0
+		taxFreeLimits = []float64{0}
 	}
 
 	config.capitalGainsTax, err = getFloatValue("capital_gains_tax")
@@ -371,7 +373,15 @@ func runSellVsKeepScenario(marketData *MarketData) {
 	// Display market data
 	displayMarketData(marketData)
 
-	// Display projections
+	// Display loan amortization if there's a remaining loan
+	if config.loanAmount > 0 {
+		displayAmortizationTable()
+	}
+
+	// Display sale proceeds analysis at various future periods
+	displaySaleProceeds()
+
+	// Display SELL vs KEEP comparison
 	displaySellVsKeepComparison()
 }
 
@@ -744,6 +754,21 @@ func displayInputParameters(md *MarketData) {
 	fmt.Println()
 	fmt.Println(groupStyle.Render("ECONOMIC ASSUMPTIONS"))
 	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Inflation Rate"), config.inflationRate)
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Investment Return Rate"), config.investmentReturnRate)
+
+	// Display market averages with ticker symbols in cyan
+	if md != nil && len(md.VOO) > 0 {
+		vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg := calculateMarketAverages(md)
+		if vooAvg > 0 {
+			tickerStyle := re.NewStyle().Foreground(MonokaiCyan)
+			fmt.Printf("    Market Averages (10y): %s %.1f%%, %s %.1f%%, %s %.1f%%, %s %.1f%%, %s %.1f%%\n",
+				tickerStyle.Render("VOO"), vooAvg,
+				tickerStyle.Render("QQQ"), qqqAvg,
+				tickerStyle.Render("VTI"), vtiAvg,
+				tickerStyle.Render("BND"), bndAvg,
+				tickerStyle.Render("60/40"), mix6040Avg)
+		}
+	}
 
 	fmt.Println()
 	fmt.Println(groupStyle.Render("BUYING"))
@@ -788,17 +813,6 @@ func displayInputParameters(md *MarketData) {
 	fmt.Printf("  %s: %s\n", labelStyle.Render("Monthly Rent"), formatCurrency(config.monthlyRent))
 	fmt.Printf("  %s: %s\n", labelStyle.Render("Annual Rent Costs"), formatCurrency(config.annualRentCosts))
 	fmt.Printf("  %s: %s\n", labelStyle.Render("Other Annual Costs"), formatCurrency(config.otherAnnualCosts))
-	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Investment Return Rate"), config.investmentReturnRate)
-
-	// Display market averages under investment return rate
-	if md != nil && len(md.VOO) > 0 {
-		vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg := calculateMarketAverages(md)
-		if vooAvg > 0 {
-			fmt.Printf("    Market Averages (10y): VOO %.1f%%, QQQ %.1f%%, VTI %.1f%%, BND %.1f%%, 60/40 %.1f%%\n",
-				vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg)
-		}
-	}
-
 	fmt.Printf("  %s: %s\n", labelStyle.Render("Total Monthly Cost"), formatCurrency(config.totalMonthlyRentingCost))
 
 	if config.includeSelling > 0 {
@@ -807,7 +821,23 @@ func displayInputParameters(md *MarketData) {
 		fmt.Printf("  %s: Yes\n", labelStyle.Render("Include Selling Analysis"))
 		fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Agent Commission"), config.agentCommission)
 		fmt.Printf("  %s: %s\n", labelStyle.Render("Staging/Selling Costs"), formatCurrency(config.stagingCosts))
-		fmt.Printf("  %s: %s\n", labelStyle.Render("Tax-Free Gains Limit"), formatCurrency(config.taxFreeLimit))
+
+		// Format tax-free limits
+		taxFreeLimitStr := ""
+		if len(taxFreeLimits) == 1 {
+			taxFreeLimitStr = fmt.Sprintf("%s (all years)", formatCurrency(taxFreeLimits[0]))
+		} else {
+			limitStrs := make([]string, len(taxFreeLimits))
+			for i, limit := range taxFreeLimits {
+				if i == len(taxFreeLimits)-1 {
+					limitStrs[i] = fmt.Sprintf("%s (year %d+)", formatCurrency(limit), i+1)
+				} else {
+					limitStrs[i] = fmt.Sprintf("%s (year %d)", formatCurrency(limit), i+1)
+				}
+			}
+			taxFreeLimitStr = strings.Join(limitStrs, ", ")
+		}
+		fmt.Printf("  %s: %s\n", labelStyle.Render("Tax-Free Gains Limit"), taxFreeLimitStr)
 		fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Capital Gains Tax Rate"), config.capitalGainsTax)
 	} else {
 		fmt.Println()
@@ -939,8 +969,16 @@ func displayComparisonTable() {
 
 // calculateSaleProceeds calculates the net proceeds from selling at a given time
 func calculateSaleProceeds(months int) (salePrice, totalSellingCosts, loanPayoff, capitalGains, taxOnGains, netProceeds float64) {
+	// Determine starting price for appreciation calculation
+	// SELL vs KEEP: start from current market value
+	// BUY vs RENT: start from original purchase price
+	startingPrice := config.purchasePrice
+	if config.currentMarketValue > 0 {
+		startingPrice = config.currentMarketValue
+	}
+
 	// Calculate asset value (sale price) by compounding appreciation rates
-	salePrice = config.purchasePrice
+	salePrice = startingPrice
 	years := months / 12
 	remainingMonths := months % 12
 
@@ -976,11 +1014,22 @@ func calculateSaleProceeds(months int) (salePrice, totalSellingCosts, loanPayoff
 	}
 	loanPayoff = remainingLoanBalance[monthIndex]
 
-	// Calculate capital gains
-	capitalGains = salePrice - config.purchasePrice
+	// Calculate capital gains (selling costs are deductible)
+	capitalGains = salePrice - config.purchasePrice - totalSellingCosts
+
+	// Get tax-free limit for this period
+	// For year 1 (12 months), use index 0; for year 2 (24 months), use index 1, etc.
+	taxFreeLimitIndex := years - 1
+	if taxFreeLimitIndex < 0 {
+		taxFreeLimitIndex = 0
+	}
+	if taxFreeLimitIndex >= len(taxFreeLimits) {
+		taxFreeLimitIndex = len(taxFreeLimits) - 1
+	}
+	taxFreeLimit := taxFreeLimits[taxFreeLimitIndex]
 
 	// Calculate taxable gains (after exemption)
-	taxableGains := math.Max(0, capitalGains-config.taxFreeLimit)
+	taxableGains := math.Max(0, capitalGains-taxFreeLimit)
 
 	// Calculate tax on gains
 	taxOnGains = taxableGains * (config.capitalGainsTax / 100)
@@ -1252,6 +1301,21 @@ func displayInputParametersSellVsKeep(md *MarketData) {
 	fmt.Println()
 	fmt.Println(groupStyle.Render("ECONOMIC ASSUMPTIONS"))
 	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Inflation Rate"), config.inflationRate)
+	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Investment Return Rate"), config.investmentReturnRate)
+
+	// Display market averages with ticker symbols in cyan
+	if md != nil && len(md.VOO) > 0 {
+		vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg := calculateMarketAverages(md)
+		if vooAvg > 0 {
+			tickerStyle := re.NewStyle().Foreground(MonokaiCyan)
+			fmt.Printf("    Market Averages (10y): %s %.1f%%, %s %.1f%%, %s %.1f%%, %s %.1f%%, %s %.1f%%\n",
+				tickerStyle.Render("VOO"), vooAvg,
+				tickerStyle.Render("QQQ"), qqqAvg,
+				tickerStyle.Render("VTI"), vtiAvg,
+				tickerStyle.Render("BND"), bndAvg,
+				tickerStyle.Render("60/40"), mix6040Avg)
+		}
+	}
 
 	fmt.Println()
 	fmt.Println(groupStyle.Render("ASSET"))
@@ -1297,16 +1361,6 @@ func displayInputParametersSellVsKeep(md *MarketData) {
 
 	fmt.Println()
 	fmt.Println(groupStyle.Render("INVESTING (if selling)"))
-	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Investment Return Rate"), config.investmentReturnRate)
-
-	// Display market averages under investment return rate
-	if md != nil && len(md.VOO) > 0 {
-		vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg := calculateMarketAverages(md)
-		if vooAvg > 0 {
-			fmt.Printf("    Market Averages (10y): VOO %.1f%%, QQQ %.1f%%, VTI %.1f%%, BND %.1f%%, 60/40 %.1f%%\n",
-				vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg)
-		}
-	}
 
 	// Check if renting analysis is included
 	includeRenting, _ := getFloatValue("include_renting_sell")
@@ -1324,7 +1378,23 @@ func displayInputParametersSellVsKeep(md *MarketData) {
 	fmt.Println(groupStyle.Render("SELLING COSTS"))
 	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Agent Commission"), config.agentCommission)
 	fmt.Printf("  %s: %s\n", labelStyle.Render("Staging/Selling Costs"), formatCurrency(config.stagingCosts))
-	fmt.Printf("  %s: %s\n", labelStyle.Render("Tax-Free Gains Limit"), formatCurrency(config.taxFreeLimit))
+
+	// Format tax-free limits
+	taxFreeLimitStr := ""
+	if len(taxFreeLimits) == 1 {
+		taxFreeLimitStr = fmt.Sprintf("%s (all years)", formatCurrency(taxFreeLimits[0]))
+	} else {
+		limitStrs := make([]string, len(taxFreeLimits))
+		for i, limit := range taxFreeLimits {
+			if i == len(taxFreeLimits)-1 {
+				limitStrs[i] = fmt.Sprintf("%s (year %d+)", formatCurrency(limit), i+1)
+			} else {
+				limitStrs[i] = fmt.Sprintf("%s (year %d)", formatCurrency(limit), i+1)
+			}
+		}
+		taxFreeLimitStr = strings.Join(limitStrs, ", ")
+	}
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Tax-Free Gains Limit"), taxFreeLimitStr)
 	fmt.Printf("  %s: %.2f%%\n", labelStyle.Render("Capital Gains Tax Rate"), config.capitalGainsTax)
 }
 
@@ -1335,8 +1405,11 @@ func calculateSellNetWorth(months int) float64 {
 	agentFee := salePrice * (config.agentCommission / 100)
 	totalSellingCosts := agentFee + config.stagingCosts
 	loanPayoff := config.loanAmount
-	capitalGains := salePrice - config.purchasePrice
-	taxableGains := math.Max(0, capitalGains-config.taxFreeLimit)
+	// Capital gains with selling costs deducted
+	capitalGains := salePrice - config.purchasePrice - totalSellingCosts
+	// Use first tax-free limit (selling now = year 0)
+	taxFreeLimit := taxFreeLimits[0]
+	taxableGains := math.Max(0, capitalGains-taxFreeLimit)
 	taxOnGains := taxableGains * (config.capitalGainsTax / 100)
 	netProceeds := salePrice - totalSellingCosts - loanPayoff - taxOnGains
 
@@ -1374,107 +1447,91 @@ func calculateSellNetWorth(months int) float64 {
 	}
 }
 
-// calculateKeepNetWorth calculates net worth if keeping the asset
+// calculateKeepNetWorth calculates net worth if keeping the asset and selling at future point
 func calculateKeepNetWorth(months int) float64 {
-	// Calculate asset value starting from current market value
-	assetValue := config.currentMarketValue
-	years := months / 12
-	remainingMonths := months % 12
+	// Get net proceeds from selling at this future point
+	// This accounts for appreciation, selling costs, loan payoff, and capital gains tax
+	_, _, _, _, _, netProceeds := calculateSaleProceeds(months)
 
-	// Apply each year's appreciation rate
-	for year := 0; year < years; year++ {
-		rateIndex := year
-		if rateIndex >= len(appreciationRates) {
-			rateIndex = len(appreciationRates) - 1
-		}
-		assetValue *= (1 + appreciationRates[rateIndex]/100)
+	// Subtract cumulative costs of ownership during this period
+	// This includes loan payments, insurance, taxes, and monthly expenses
+	cumulativeOwnershipCosts := 0.0
+	for i := 0; i < months; i++ {
+		cumulativeOwnershipCosts += monthlyBuyingCosts[i]
 	}
 
-	// Apply partial year if there are remaining months
-	if remainingMonths > 0 {
-		rateIndex := years
-		if rateIndex >= len(appreciationRates) {
-			rateIndex = len(appreciationRates) - 1
-		}
-		partialYearFactor := math.Pow(1+appreciationRates[rateIndex]/100, float64(remainingMonths)/12.0)
-		assetValue *= partialYearFactor
-	}
-
-	// Get remaining loan balance after this period
-	monthIndex := months - 1
-	if monthIndex >= len(remainingLoanBalance) {
-		monthIndex = len(remainingLoanBalance) - 1
-	}
-	loanBalance := remainingLoanBalance[monthIndex]
-
-	// Net worth = asset value - loan balance
-	return assetValue - loanBalance
+	return netProceeds - cumulativeOwnershipCosts
 }
 
 // displaySellVsKeepComparison displays the comparison table for SELL vs KEEP
 func displaySellVsKeepComparison() {
 	periods := getPeriods(config.totalMonths, config.include30Year > 0)
 
-	// Build table rows
-	rows := [][]string{
-		{"Period", "SELL Net Worth", "KEEP Asset Value", "KEEP Loan Balance", "KEEP Net Worth", "KEEP - SELL"},
+	// Check if renting analysis is included
+	includeRenting, _ := getFloatValue("include_renting_sell")
+
+	// Build table rows with Cum. Expenses columns
+	var rows [][]string
+	if includeRenting > 0 {
+		rows = [][]string{
+			{"Period", "SELL Cum. Exp", "SELL Net Worth", "KEEP Cum. Exp", "KEEP Net Proceeds", "KEEP - SELL"},
+		}
+	} else {
+		rows = [][]string{
+			{"Period", "SELL Net Worth", "KEEP Cum. Exp", "KEEP Net Proceeds", "KEEP - SELL"},
+		}
 	}
 
 	// Build each data row
 	for _, period := range periods {
 		sellNetWorth := calculateSellNetWorth(period.months)
 		keepNetWorth := calculateKeepNetWorth(period.months)
-
-		// Calculate asset value for KEEP
-		assetValue := config.currentMarketValue
-		years := period.months / 12
-		remainingMonths := period.months % 12
-
-		for year := 0; year < years; year++ {
-			rateIndex := year
-			if rateIndex >= len(appreciationRates) {
-				rateIndex = len(appreciationRates) - 1
-			}
-			assetValue *= (1 + appreciationRates[rateIndex]/100)
-		}
-
-		if remainingMonths > 0 {
-			rateIndex := years
-			if rateIndex >= len(appreciationRates) {
-				rateIndex = len(appreciationRates) - 1
-			}
-			partialYearFactor := math.Pow(1+appreciationRates[rateIndex]/100, float64(remainingMonths)/12.0)
-			assetValue *= partialYearFactor
-		}
-
-		// Get remaining loan balance
-		monthIndex := period.months - 1
-		if monthIndex >= len(remainingLoanBalance) {
-			monthIndex = len(remainingLoanBalance) - 1
-		}
-		loanBalance := remainingLoanBalance[monthIndex]
-
 		difference := keepNetWorth - sellNetWorth
 
-		rows = append(rows, []string{
-			"NET " + period.label,
-			formatCurrency(sellNetWorth),
-			formatCurrency(assetValue),
-			formatCurrency(loanBalance),
-			formatCurrency(keepNetWorth),
-			formatCurrency(difference),
-		})
+		// Calculate cumulative ownership expenses for KEEP
+		cumulativeOwnershipCosts := 0.0
+		for i := 0; i < period.months; i++ {
+			cumulativeOwnershipCosts += monthlyBuyingCosts[i]
+		}
+
+		if includeRenting > 0 {
+			// Calculate cumulative rental expenses for SELL
+			cumulativeRentExpenses := config.rentDeposit // Initial deposit
+			for i := 0; i < period.months; i++ {
+				cumulativeRentExpenses += monthlyRentingCosts[i]
+			}
+			// Subtract recoverable deposit (75%)
+			cumulativeRentExpenses -= config.rentDeposit * 0.75
+
+			rows = append(rows, []string{
+				"NET " + period.label,
+				formatCurrency(cumulativeRentExpenses),
+				formatCurrency(sellNetWorth),
+				formatCurrency(cumulativeOwnershipCosts),
+				formatCurrency(keepNetWorth),
+				formatCurrency(difference),
+			})
+		} else {
+			rows = append(rows, []string{
+				"NET " + period.label,
+				formatCurrency(sellNetWorth),
+				formatCurrency(cumulativeOwnershipCosts),
+				formatCurrency(keepNetWorth),
+				formatCurrency(difference),
+			})
+		}
 	}
 
 	// Build note text
-	includeRenting, _ := getFloatValue("include_renting_sell")
 	noteText := ""
 	if includeRenting > 0 {
-		noteText = fmt.Sprintf("Note: 'SELL Net Worth' = Net proceeds from selling today (sale price - selling costs - loan payoff - capital gains tax) invested at %.0f%% return, minus rental costs (inflated annually at %.1f%%). Recovers 75%% of rental deposit.\n\n", config.investmentReturnRate, config.inflationRate)
+		noteText = "Note: 'SELL Cum. Exp' = Total rental costs (deposit + all monthly rent - 75% recoverable deposit).\n\n"
+		noteText += fmt.Sprintf("'SELL Net Worth' = Net proceeds from selling today invested at %.0f%% return, minus rental costs (inflated annually at %.1f%%).\n\n", config.investmentReturnRate, config.inflationRate)
 	} else {
-		noteText = fmt.Sprintf("Note: 'SELL Net Worth' = Net proceeds from selling today (sale price - selling costs - loan payoff - capital gains tax) invested at %.0f%% return with monthly compounding.\n\n", config.investmentReturnRate)
+		noteText = fmt.Sprintf("Note: 'SELL Net Worth' = Net proceeds from selling today invested at %.0f%% return with monthly compounding.\n\n", config.investmentReturnRate)
 	}
-	noteText += "'KEEP Net Worth' = Future asset value (with appreciation) minus remaining loan balance. Asset continues to appreciate, loan gets paid down over time.\n\n"
+	noteText += "'KEEP Cum. Exp' = Total ownership costs (loan payments + insurance + taxes + monthly expenses, inflated annually).\n\n"
+	noteText += "'KEEP Net Proceeds' = Net proceeds if keeping and selling at that future point, minus cumulative ownership costs (see Sale Proceeds Analysis for sale breakdown).\n\n"
 	noteText += "'KEEP - SELL': Positive values mean keeping wins, negative values mean selling wins."
 
 	displayTable("NET WORTH PROJECTIONS: SELL VS KEEP", rows, noteText, false)

@@ -73,6 +73,7 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 			Scenario: "both",
 			Fields: []FormField{
 				makeField("inflation_rate", "Inflation Rate (%)", "Annual inflation for all recurring costs", defaults),
+				makeField("investment_return_rate", "Investment Return Rate (%)", "Expected return on investments. Market averages shown below", defaults),
 				makeToggleField("include_30year", "Include 30-Year Projections", "Toggle to show 15y, 20y, 30y periods (default: 10y max)", defaults),
 			},
 		},
@@ -85,8 +86,8 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 				makeField("loan_rate", "Loan Rate (%)", "Annual interest rate (e.g., 6.5)", defaults),
 				makeField("loan_term", "Loan Term", "Loan duration (e.g., 5y, 30y)", defaults),
 				makeField("annual_insurance", "Annual Tax & Insurance ($)", "Yearly insurance cost", defaults),
-				makeField("annual_taxes", "Other Annual Costs ($)", "Taxes, HOA fees, etc.", defaults),
-				makeField("monthly_expenses", "Monthly Expenses ($)", "Monthly HOA, utilities, etc.", defaults),
+				makeField("annual_taxes", "Other Annual Costs ($)", "Maintenance costs, etc.", defaults),
+				makeField("monthly_expenses", "Monthly Expenses ($)", "Monthly expenses. Typically include utilities, HOA, etc. Can be negative if earning income, e.g., -4K.", defaults),
 				makeField("appreciation_rate", "Appreciation Rate (%)", "Annual rate (can be negative for depreciation). Comma-separated values apply to first years, last value for all remaining years (e.g., '10,5,3' = 10% yr1, 5% yr2, 3% yr3+)", defaults),
 			},
 		},
@@ -114,7 +115,6 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 				makeField("monthly_rent", "Monthly Rent ($)", "Base monthly rent amount", defaults),
 				makeField("annual_rent_costs", "Annual Rent Costs ($)", "Yearly rental-related costs", defaults),
 				makeField("other_annual_costs", "Other Annual Costs ($)", "Additional yearly costs for renting", defaults),
-				makeField("investment_return_rate", "Investment Return Rate (%)", "Expected return on investments. Market averages shown in output", defaults),
 			},
 		},
 		{
@@ -125,7 +125,6 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 				makeField("rent_deposit", "Rental Deposit ($)", "Initial rental deposit if selling", defaults),
 				makeField("monthly_rent", "Monthly Rent ($)", "Monthly rent if selling", defaults),
 				makeField("annual_rent_costs", "Annual Rent Costs ($)", "Yearly rental costs if selling", defaults),
-				makeField("investment_return_rate", "Investment Return Rate (%)", "Expected return on sale proceeds. Market averages shown in output", defaults),
 			},
 		},
 		{
@@ -135,7 +134,7 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 				makeToggleField("include_selling", "Include Selling Analysis", "Toggle to enable/disable selling analysis (BUY vs RENT only)", defaults),
 				makeField("agent_commission", "Agent Commission (%)", "Percentage of sale price paid to agents", defaults),
 				makeField("staging_costs", "Staging/Selling Costs ($)", "Fixed costs to prepare and sell", defaults),
-				makeField("tax_free_limit", "Tax-Free Gains Limit ($)", "Capital gains exempt from tax (250k/500k)", defaults),
+				makeField("tax_free_limit", "Tax-Free Gains Limit ($)", "Capital gains exempt from tax. Comma-separated for different years (e.g., '500K,0K' = 500K year 1, 0 year 2+)", defaults),
 				makeField("capital_gains_tax", "Capital Gains Tax Rate (%)", "Long-term capital gains tax rate", defaults),
 			},
 		},
@@ -446,9 +445,15 @@ func (m FormModel) View() string {
 			if field.Key == "investment_return_rate" && m.marketData != nil && len(m.marketData.VOO) > 0 {
 				vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg := calculateMarketAverages(m.marketData)
 				if vooAvg > 0 {
-					marketInfo := fmt.Sprintf("    Market Averages (10y): VOO %.1f%%, QQQ %.1f%%, VTI %.1f%%, BND %.1f%%, 60/40 %.1f%%",
-						vooAvg, qqqAvg, vtiAvg, bndAvg, mix6040Avg)
-					b.WriteString(helpStyle.Render(marketInfo))
+					tickerStyle := lipgloss.NewStyle().Foreground(MonokaiCyan)
+					prefix := helpStyle.Render("    Market Averages (10y): ")
+					tickers := fmt.Sprintf("%s %.1f%%, %s %.1f%%, %s %.1f%%, %s %.1f%%, %s %.1f%%",
+						tickerStyle.Render("VOO"), vooAvg,
+						tickerStyle.Render("QQQ"), qqqAvg,
+						tickerStyle.Render("VTI"), vtiAvg,
+						tickerStyle.Render("BND"), bndAvg,
+						tickerStyle.Render("60/40"), mix6040Avg)
+					b.WriteString(prefix + tickers)
 					b.WriteString("\n")
 				}
 			}
