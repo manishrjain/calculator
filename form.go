@@ -22,7 +22,8 @@ type FormField struct {
 
 // FormModel is the bubbletea model for the interactive form
 type FormModel struct {
-	fields       []FormField
+	fieldsMap    map[string]*FormField  // All unique fields by key
+	fields       []*FormField           // Flattened array for navigation (points to fieldsMap entries)
 	groups       []FieldGroup
 	currentField int
 	submitted    bool
@@ -42,28 +43,47 @@ var (
 
 // FieldGroup represents a group of related fields
 type FieldGroup struct {
-	Name   string
-	Fields []FormField
+	Name     string
+	Fields   []FormField
+	Scenario string // "buy_vs_rent", "sell_vs_keep", or "both"
 }
 
 // NewFormModel creates a new form with all the input fields organized into groups
 func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
+	// Determine which scenario is selected (default to BUY vs RENT)
+	buyVsRentSelected := true
+	sellVsKeepSelected := false
+	if val, ok := defaults["scenario_sell_vs_keep"]; ok && (val == "1" || val == "yes" || val == "true") {
+		buyVsRentSelected = false
+		sellVsKeepSelected = true
+	}
+
 	// Create field groups
 	groups := []FieldGroup{
 		{
-			Name: "ECONOMIC ASSUMPTIONS",
+			Name:     "SCENARIO SELECTION",
+			Scenario: "both",
+			Fields: []FormField{
+				makeToggleFieldWithValue("scenario_buy_vs_rent", "BUY vs RENT", "Select this scenario to compare buying vs renting", buyVsRentSelected),
+				makeToggleFieldWithValue("scenario_sell_vs_keep", "SELL vs KEEP", "Select this scenario to compare selling vs keeping an existing asset", sellVsKeepSelected),
+			},
+		},
+		{
+			Name:     "ECONOMIC ASSUMPTIONS",
+			Scenario: "both",
 			Fields: []FormField{
 				makeField("inflation_rate", "Inflation Rate (%)", "Annual inflation for all recurring costs", defaults),
 				makeToggleField("include_30year", "Include 30-Year Projections", "Toggle to show 15y, 20y, 30y periods (default: 10y max)", defaults),
 			},
 		},
 		{
-			Name: "BUYING",
+			Name:     "BUYING",
+			Scenario: "buy_vs_rent",
 			Fields: []FormField{
 				makeField("purchase_price", "Asset Purchase Price ($)", "Initial purchase price of the asset", defaults),
 				makeField("loan_amount", "Loan Amount ($)", "Total mortgage/loan amount", defaults),
 				makeField("loan_rate", "Loan Rate (%)", "Annual interest rate (e.g., 6.5)", defaults),
-				makeField("loan_duration", "Loan Duration", "Loan term (e.g., 5y, 30y)", defaults),
+				makeField("loan_term", "Loan Term", "Loan duration (e.g., 5y, 30y)", defaults),
 				makeField("annual_insurance", "Annual Tax & Insurance ($)", "Yearly insurance cost", defaults),
 				makeField("annual_taxes", "Other Annual Costs ($)", "Taxes, HOA fees, etc.", defaults),
 				makeField("monthly_expenses", "Monthly Expenses ($)", "Monthly HOA, utilities, etc.", defaults),
@@ -71,7 +91,24 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 			},
 		},
 		{
-			Name: "RENTING",
+			Name:     "ASSET",
+			Scenario: "sell_vs_keep",
+			Fields: []FormField{
+				makeField("purchase_price", "Asset Purchase Price ($)", "What you originally paid for the asset (for capital gains)", defaults),
+				makeField("current_market_value", "Current Market Value ($)", "What the asset is worth today", defaults),
+				makeField("remaining_loan_amount", "Remaining Loan Amount ($)", "Current outstanding loan balance", defaults),
+				makeField("loan_rate", "Loan Rate (%)", "Annual interest rate on existing loan", defaults),
+				makeField("loan_term", "Loan Term", "Original loan duration when started (e.g., 30y)", defaults),
+				makeField("remaining_loan_term", "Remaining Loan Term", "Time left on loan (e.g., 25y)", defaults),
+				makeField("annual_insurance", "Annual Tax & Insurance ($)", "Yearly costs if keeping", defaults),
+				makeField("annual_taxes", "Other Annual Costs ($)", "Taxes, HOA fees, etc. if keeping", defaults),
+				makeField("monthly_expenses", "Monthly Expenses ($)", "Monthly costs if keeping", defaults),
+				makeField("appreciation_rate", "Appreciation Rate (%)", "Annual rate if keeping. Comma-separated for different years", defaults),
+			},
+		},
+		{
+			Name:     "RENTING",
+			Scenario: "buy_vs_rent",
 			Fields: []FormField{
 				makeField("rent_deposit", "Rental Deposit ($)", "Initial rental deposit", defaults),
 				makeField("monthly_rent", "Monthly Rent ($)", "Base monthly rent amount", defaults),
@@ -81,9 +118,21 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 			},
 		},
 		{
-			Name: "SELLING",
+			Name:     "INVESTING",
+			Scenario: "sell_vs_keep",
 			Fields: []FormField{
-				makeToggleField("include_selling", "Include Selling Analysis", "Toggle to enable/disable selling analysis", defaults),
+				makeToggleField("include_renting_sell", "Include Renting Analysis", "Toggle if selling means you'll need to rent", defaults),
+				makeField("rent_deposit", "Rental Deposit ($)", "Initial rental deposit if selling", defaults),
+				makeField("monthly_rent", "Monthly Rent ($)", "Monthly rent if selling", defaults),
+				makeField("annual_rent_costs", "Annual Rent Costs ($)", "Yearly rental costs if selling", defaults),
+				makeField("investment_return_rate", "Investment Return Rate (%)", "Expected return on sale proceeds. Market averages shown in output", defaults),
+			},
+		},
+		{
+			Name:     "SELLING",
+			Scenario: "both",
+			Fields: []FormField{
+				makeToggleField("include_selling", "Include Selling Analysis", "Toggle to enable/disable selling analysis (BUY vs RENT only)", defaults),
 				makeField("agent_commission", "Agent Commission (%)", "Percentage of sale price paid to agents", defaults),
 				makeField("staging_costs", "Staging/Selling Costs ($)", "Fixed costs to prepare and sell", defaults),
 				makeField("tax_free_limit", "Tax-Free Gains Limit ($)", "Capital gains exempt from tax (250k/500k)", defaults),
@@ -92,16 +141,32 @@ func NewFormModel(defaults map[string]string, md *MarketData) FormModel {
 		},
 	}
 
-	// Flatten fields for easy navigation
-	var fields []FormField
+	// Create fieldsMap to store unique fields by key (shared across scenarios)
+	fieldsMap := make(map[string]*FormField)
+
+	// Flatten fields for navigation, ensuring shared keys point to same instance
+	var fields []*FormField
 	for _, group := range groups {
-		fields = append(fields, group.Fields...)
+		for i := range group.Fields {
+			field := &group.Fields[i]
+			// If this key already exists, use the existing field
+			if existingField, exists := fieldsMap[field.Key]; exists {
+				fields = append(fields, existingField)
+			} else {
+				// New field, add to map and fields array
+				fieldsMap[field.Key] = field
+				fields = append(fields, field)
+			}
+		}
 	}
 
 	// Focus the first field
-	fields[0].Input.Focus()
+	if len(fields) > 0 {
+		fields[0].Input.Focus()
+	}
 
 	return FormModel{
+		fieldsMap:    fieldsMap,
 		fields:       fields,
 		groups:       groups,
 		currentField: 0,
@@ -154,8 +219,50 @@ func makeToggleField(key, label, help string, defaults map[string]string) FormFi
 	}
 }
 
+func makeToggleFieldWithValue(key, label, help string, toggled bool) FormField {
+	ti := textinput.New()
+	ti.Width = 30
+
+	return FormField{
+		Key:      key,
+		Label:    label,
+		Help:     help,
+		Input:    ti,
+		Required: false,
+		IsToggle: true,
+		Toggled:  toggled,
+	}
+}
+
 func (m FormModel) Init() tea.Cmd {
 	return textinput.Blink
+}
+
+// isFieldVisible checks if a field at the given index is visible in the current scenario
+func (m FormModel) isFieldVisible(fieldIndex int) bool {
+	if fieldIndex < 0 || fieldIndex >= len(m.fields) {
+		return false
+	}
+
+	// Determine current scenario
+	selectedScenario := "buy_vs_rent" // default
+	if scenarioField, ok := m.fieldsMap["scenario_sell_vs_keep"]; ok && scenarioField.Toggled {
+		selectedScenario = "sell_vs_keep"
+	}
+
+	// Find which group this field belongs to
+	currentIndex := 0
+	for _, group := range m.groups {
+		for range group.Fields {
+			if currentIndex == fieldIndex {
+				// Check if this group is visible in current scenario
+				return group.Scenario == "both" || group.Scenario == selectedScenario
+			}
+			currentIndex++
+		}
+	}
+
+	return false
 }
 
 func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -164,6 +271,17 @@ func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
+
+		case "ctrl+t":
+			// Toggle between scenarios
+			if buyField, ok := m.fieldsMap["scenario_buy_vs_rent"]; ok {
+				if sellField, ok := m.fieldsMap["scenario_sell_vs_keep"]; ok {
+					// Toggle between the two
+					buyField.Toggled = !buyField.Toggled
+					sellField.Toggled = !sellField.Toggled
+				}
+			}
+			return m, nil
 
 		case "ctrl+k":
 			// Save values and submit
@@ -182,23 +300,54 @@ func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "up", "shift+tab":
-			if m.currentField > 0 {
-				m.fields[m.currentField].Input.Blur()
+			// Move to previous visible field
+			m.fields[m.currentField].Input.Blur()
+			for {
 				m.currentField--
-				m.fields[m.currentField].Input.Focus()
+				if m.currentField < 0 {
+					m.currentField = 0
+					break
+				}
+				if m.isFieldVisible(m.currentField) {
+					break
+				}
 			}
+			m.fields[m.currentField].Input.Focus()
 
 		case "down", "tab":
-			if m.currentField < len(m.fields)-1 {
-				m.fields[m.currentField].Input.Blur()
+			// Move to next visible field
+			m.fields[m.currentField].Input.Blur()
+			for {
 				m.currentField++
-				m.fields[m.currentField].Input.Focus()
+				if m.currentField >= len(m.fields) {
+					m.currentField = len(m.fields) - 1
+					break
+				}
+				if m.isFieldVisible(m.currentField) {
+					break
+				}
 			}
+			m.fields[m.currentField].Input.Focus()
 
 		case " ", "enter":
 			// Toggle if current field is a toggle
 			if m.fields[m.currentField].IsToggle {
-				m.fields[m.currentField].Toggled = !m.fields[m.currentField].Toggled
+				currentKey := m.fields[m.currentField].Key
+
+				// Handle mutual exclusivity for scenario toggles
+				if currentKey == "scenario_buy_vs_rent" || currentKey == "scenario_sell_vs_keep" {
+					// Find both scenario fields and ensure mutual exclusivity
+					for i := range m.fields {
+						if m.fields[i].Key == "scenario_buy_vs_rent" {
+							m.fields[i].Toggled = (currentKey == "scenario_buy_vs_rent")
+						} else if m.fields[i].Key == "scenario_sell_vs_keep" {
+							m.fields[i].Toggled = (currentKey == "scenario_sell_vs_keep")
+						}
+					}
+				} else {
+					// Regular toggle
+					m.fields[m.currentField].Toggled = !m.fields[m.currentField].Toggled
+				}
 				return m, nil
 			}
 		}
@@ -219,6 +368,15 @@ func (m FormModel) View() string {
 
 	var b strings.Builder
 
+	// Determine which scenario is currently selected
+	selectedScenario := "buy_vs_rent" // default
+	for _, field := range m.fields {
+		if field.Key == "scenario_sell_vs_keep" && field.Toggled {
+			selectedScenario = "sell_vs_keep"
+			break
+		}
+	}
+
 	// Title
 	b.WriteString(titleStyle.Render("┌────────────────────────────────────────────────────────────────┐"))
 	b.WriteString("\n")
@@ -232,6 +390,11 @@ func (m FormModel) View() string {
 
 	// Render each group
 	for groupIdx, group := range m.groups {
+		// Skip groups that don't match the selected scenario
+		if group.Scenario != "both" && group.Scenario != selectedScenario {
+			fieldIndex += len(group.Fields)
+			continue
+		}
 		// Group header
 		b.WriteString(groupStyle.Render("  " + group.Name))
 		b.WriteString("\n")
@@ -239,7 +402,9 @@ func (m FormModel) View() string {
 		// Render fields in this group (label and input on same line)
 		for i := 0; i < len(group.Fields); i++ {
 			currentFieldIndex := fieldIndex + i
-			field := m.fields[currentFieldIndex]
+			// Get field from fieldsMap to ensure we're using shared instances
+			groupField := &group.Fields[i]
+			field := m.fieldsMap[groupField.Key]
 
 			// Render input or toggle
 			var input string
@@ -307,7 +472,7 @@ func (m FormModel) View() string {
 	b.WriteString("\n\n")
 
 	// Navigation help
-	b.WriteString(helpStyle.Render("  ↑/↓: Navigate  Space/Enter: Toggle  Ctrl+K: Calculate  Ctrl+C/Esc: Quit"))
+	b.WriteString(helpStyle.Render("  ↑/↓: Navigate  Space/Enter: Toggle  Ctrl+T: Switch Scenario  Ctrl+K: Calculate  Ctrl+C/Esc: Quit"))
 	b.WriteString("\n")
 
 	return b.String()

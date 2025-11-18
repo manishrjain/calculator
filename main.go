@@ -161,7 +161,7 @@ func main() {
 		}
 
 		// Get loan duration
-		totalMonths, err = getIntValue("loan_duration", parseDuration)
+		totalMonths, err = getIntValue("loan_term", parseDuration)
 		if err != nil {
 			fmt.Println("Invalid duration format:", err)
 			return
