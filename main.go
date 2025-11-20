@@ -29,6 +29,11 @@ var cumulativeInterestPaid []float64
 var appreciationRates []float64 // Annual appreciation rates
 var taxFreeLimits []float64     // Tax-free capital gains limits by year
 
+// Global arrays for KEEP scenario investment tracking
+var monthlyKeepInvestmentValue []float64 // Investment value at each month
+var monthlyKeepRealCosts []float64       // Cumulative real out-of-pocket costs at each month
+var monthlyKeepNetPosition []float64     // Net position (investment - real costs) at each month
+
 // Config holds all input parameters
 type Config struct {
 	// Economic
@@ -921,10 +926,13 @@ func displaySellExpensesBreakdown() {
 
 	// Build each data row
 	for _, period := range periods {
-		// Determine which year this period represents
-		years := period.months / 12
+		// Determine which year this period represents (last year covered by this period)
+		years := (period.months - 1) / 12
 		if years >= len(yearlyData) {
 			years = len(yearlyData) - 1
+		}
+		if years < 0 {
+			years = 0
 		}
 
 		// Get annual expenses for this specific year
@@ -1022,37 +1030,53 @@ func displayKeepExpensesBreakdown() {
 
 	// Build table rows
 	rows := [][]string{
-		{"Period", "Loan Payment", "Tax/Insurance", "Other Costs", "Total", "Cumulative Total"},
+		{"Period", "Loan Payment", "Tax/Insurance", "Other Costs", "Cumulative Exp", "Investment Val", "Net Position"},
 	}
 
 	// Build each data row
 	for _, period := range periods {
-		// Determine which year this period represents
-		years := period.months / 12
+		// Determine which year this period represents (last year covered by this period)
+		years := (period.months - 1) / 12
 		if years >= len(yearlyData) {
 			years = len(yearlyData) - 1
+		}
+		if years < 0 {
+			years = 0
 		}
 
 		// Get annual expenses for this specific year
 		ye := yearlyData[years]
 
-		// Calculate cumulative total from start to this period
+		// Calculate cumulative expenses and get investment values from pre-calculated arrays
 		cumulativeTotal := 0.0
 		for i := 0; i < period.months; i++ {
 			cumulativeTotal += monthlyBuyingCosts[i]
 		}
+
+		// Get investment value and net position from pre-calculated arrays
+		monthIndex := period.months - 1
+		if monthIndex < 0 {
+			monthIndex = 0
+		}
+		if monthIndex >= len(monthlyKeepInvestmentValue) {
+			monthIndex = len(monthlyKeepInvestmentValue) - 1
+		}
+
+		investmentValue := monthlyKeepInvestmentValue[monthIndex]
+		netPosition := monthlyKeepNetPosition[monthIndex]
 
 		rows = append(rows, []string{
 			"KEEP " + period.label,
 			formatCurrency(ye.loanPayment),
 			formatCurrency(ye.insurance),
 			formatCurrency(ye.otherCosts),
-			formatCurrency(ye.total),
 			formatCurrency(cumulativeTotal),
+			formatCurrency(investmentValue),
+			formatCurrency(netPosition),
 		})
 	}
 
-	noteText := fmt.Sprintf("Note: Shows annual expenses for the specific year of each period. 'Loan Payment' = Loan payments for that year (fixed monthly amount, stops after loan term). 'Tax/Insurance' = Annual tax & insurance (inflated at %.1f%% annually). 'Other Costs' = Other annual costs + monthly expenses (inflated). 'Total' = Sum for that year. 'Cumulative Total' = Running total of all expenses from year 1.", config.inflationRate)
+	noteText := fmt.Sprintf("Note: Shows annual expenses for the specific year of each period. 'Loan Payment' = Loan payments for that year (fixed monthly amount, stops after loan term). 'Tax/Insurance' = Annual tax & insurance (inflated at %.1f%% annually). 'Other Costs' = Other annual costs + monthly expenses (inflated). 'Cumulative Exp' = Running total of raw expenses. 'Investment Val' = Value of invested income (compounded at %.1f%% return). 'Net Position' = Investment value minus real out-of-pocket costs.", config.inflationRate, config.investmentReturnRate)
 
 	displayTable("KEEP EXPENSES BREAKDOWN", rows, noteText, false)
 }
@@ -1440,6 +1464,47 @@ func populateMonthlyCosts() {
 			cumulativeInterestPaid[i] = totalInterestPaid
 		}
 	}
+
+	// Calculate KEEP investment tracking arrays
+	calculateKeepInvestmentTracking(maxMonths)
+}
+
+// calculateKeepInvestmentTracking populates investment tracking arrays for KEEP scenario
+func calculateKeepInvestmentTracking(maxMonths int) {
+	monthlyKeepInvestmentValue = make([]float64, maxMonths)
+	monthlyKeepRealCosts = make([]float64, maxMonths)
+	monthlyKeepNetPosition = make([]float64, maxMonths)
+
+	investmentValue := 0.0
+	totalRealCosts := 0.0
+	monthlyInvestmentRate := config.investmentReturnRate / 100 / 12
+
+	for i := 0; i < maxMonths; i++ {
+		monthlyCost := monthlyBuyingCosts[i]
+
+		if monthlyCost < 0 {
+			// Income: invest it
+			investmentValue += -monthlyCost
+		} else if monthlyCost > 0 {
+			// Expense: first use investment value, then real costs
+			if investmentValue >= monthlyCost {
+				investmentValue -= monthlyCost
+			} else {
+				// Use up all investment, remainder is real cost
+				deficit := monthlyCost - investmentValue
+				investmentValue = 0
+				totalRealCosts += deficit
+			}
+		}
+
+		// Compound whatever investment value remains
+		investmentValue *= (1 + monthlyInvestmentRate)
+
+		// Store values for this month
+		monthlyKeepInvestmentValue[i] = investmentValue
+		monthlyKeepRealCosts[i] = totalRealCosts
+		monthlyKeepNetPosition[i] = investmentValue - totalRealCosts
+	}
 }
 
 // calculateRentingNetWorth calculates net worth for the renting scenario
@@ -1632,14 +1697,17 @@ func calculateKeepNetWorth(months int) float64 {
 	// This accounts for appreciation, selling costs, loan payoff, and capital gains tax
 	_, _, _, _, _, netProceeds := calculateSaleProceeds(months)
 
-	// Subtract cumulative costs of ownership during this period
-	// This includes loan payments, insurance, taxes, and monthly expenses
-	cumulativeOwnershipCosts := 0.0
-	for i := 0; i < months; i++ {
-		cumulativeOwnershipCosts += monthlyBuyingCosts[i]
+	// Get net position from pre-calculated arrays
+	monthIndex := months - 1
+	if monthIndex < 0 {
+		monthIndex = 0
 	}
+	if monthIndex >= len(monthlyKeepNetPosition) {
+		monthIndex = len(monthlyKeepNetPosition) - 1
+	}
+	netPosition := monthlyKeepNetPosition[monthIndex]
 
-	return netProceeds - cumulativeOwnershipCosts
+	return netProceeds + netPosition
 }
 
 // displaySellVsKeepComparison displays the comparison table for SELL vs KEEP
@@ -1653,11 +1721,11 @@ func displaySellVsKeepComparison() {
 	var rows [][]string
 	if includeRenting > 0 {
 		rows = [][]string{
-			{"Period", "SELL Cum. Exp", "SELL Net Worth", "KEEP Cum. Exp", "KEEP Net Proceeds", "KEEP - SELL"},
+			{"Period", "SELL Cum. Exp", "SELL Net Worth", "KEEP Net Position", "KEEP Net Proceeds", "KEEP - SELL"},
 		}
 	} else {
 		rows = [][]string{
-			{"Period", "SELL Net Worth", "KEEP Cum. Exp", "KEEP Net Proceeds", "KEEP - SELL"},
+			{"Period", "SELL Net Worth", "KEEP Net Position", "KEEP Net Proceeds", "KEEP - SELL"},
 		}
 	}
 
@@ -1667,11 +1735,15 @@ func displaySellVsKeepComparison() {
 		keepNetWorth := calculateKeepNetWorth(period.months)
 		difference := keepNetWorth - sellNetWorth
 
-		// Calculate cumulative ownership expenses for KEEP
-		cumulativeOwnershipCosts := 0.0
-		for i := 0; i < period.months; i++ {
-			cumulativeOwnershipCosts += monthlyBuyingCosts[i]
+		// Get net position for KEEP from pre-calculated arrays
+		monthIndex := period.months - 1
+		if monthIndex < 0 {
+			monthIndex = 0
 		}
+		if monthIndex >= len(monthlyKeepNetPosition) {
+			monthIndex = len(monthlyKeepNetPosition) - 1
+		}
+		keepNetPosition := monthlyKeepNetPosition[monthIndex]
 
 		if includeRenting > 0 {
 			// Calculate cumulative rental expenses for SELL
@@ -1686,7 +1758,7 @@ func displaySellVsKeepComparison() {
 				"NET " + period.label,
 				formatCurrency(cumulativeRentExpenses),
 				formatCurrency(sellNetWorth),
-				formatCurrency(cumulativeOwnershipCosts),
+				formatCurrency(keepNetPosition),
 				formatCurrency(keepNetWorth),
 				formatCurrency(difference),
 			})
@@ -1694,7 +1766,7 @@ func displaySellVsKeepComparison() {
 			rows = append(rows, []string{
 				"NET " + period.label,
 				formatCurrency(sellNetWorth),
-				formatCurrency(cumulativeOwnershipCosts),
+				formatCurrency(keepNetPosition),
 				formatCurrency(keepNetWorth),
 				formatCurrency(difference),
 			})
@@ -1709,8 +1781,8 @@ func displaySellVsKeepComparison() {
 	} else {
 		noteText = fmt.Sprintf("Note: 'SELL Net Worth' = Net proceeds from selling today invested at %.0f%% return with monthly compounding.\n\n", config.investmentReturnRate)
 	}
-	noteText += "'KEEP Cum. Exp' = Total ownership costs (loan payments + insurance + taxes + monthly expenses, inflated annually).\n\n"
-	noteText += "'KEEP Net Proceeds' = Net proceeds if keeping and selling at that future point, minus cumulative ownership costs (see Sale Proceeds Analysis for sale breakdown).\n\n"
+	noteText += fmt.Sprintf("'KEEP Net Position' = Investment value from income (invested at %.0f%% return) minus real out-of-pocket costs (see KEEP Expenses Breakdown for details).\n\n", config.investmentReturnRate)
+	noteText += "'KEEP Net Proceeds' = Net proceeds if keeping and selling at that future point, plus net position (see Sale Proceeds Analysis for sale breakdown).\n\n"
 	noteText += "'KEEP - SELL': Positive values mean keeping wins, negative values mean selling wins."
 
 	displayTable("NET WORTH PROJECTIONS: SELL VS KEEP", rows, noteText, false)
