@@ -33,6 +33,8 @@ export function getPeriods(loanDuration: number, include30Year: boolean): Period
   ];
 
   let standardPeriods = basePeriods;
+  const maxMonths = include30Year ? 360 : 120;
+
   if (include30Year) {
     standardPeriods = [...basePeriods, ...extendedPeriods];
   }
@@ -41,7 +43,8 @@ export function getPeriods(loanDuration: number, include30Year: boolean): Period
   let loanTermLabel = '';
   let includeLoanTerm = false;
 
-  if (loanDuration > 0 && loanDuration % 12 === 0) {
+  // Only include loan term if it's within the allowed range
+  if (loanDuration > 0 && loanDuration % 12 === 0 && loanDuration <= maxMonths) {
     const years = loanDuration / 12;
     loanTermLabel = `X ${years}y`;
     includeLoanTerm = true;

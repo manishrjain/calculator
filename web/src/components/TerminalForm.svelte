@@ -13,6 +13,7 @@
     help: string;
     placeholder: string;
     visible: () => boolean;
+    disabled?: () => boolean;
     isHeader?: boolean;
     headerText?: string;
     toggleValues?: string[];  // For fields that can toggle between two values
@@ -26,42 +27,43 @@
     // Rebuild fields list when scenario changes
     fields = [
       { key: 'header_scenario', label: '', help: '', placeholder: '', visible: () => true, isHeader: true, headerText: 'SCENARIO SELECTION' },
-      { key: 'scenario', label: 'Scenario', help: 'buy_vs_rent or sell_vs_keep', placeholder: 'buy_vs_rent', visible: () => true, toggleValues: ['buy_vs_rent', 'sell_vs_keep'] },
+      { key: 'scenario', label: 'Scenario', help: 'Select buy_vs_rent to compare buying vs renting, or sell_vs_keep to compare selling vs keeping an existing asset', placeholder: 'buy_vs_rent', visible: () => true, toggleValues: ['buy_vs_rent', 'sell_vs_keep'] },
 
       { key: 'header_economic', label: '', help: '', placeholder: '', visible: () => true, isHeader: true, headerText: 'ECONOMIC ASSUMPTIONS' },
       { key: 'inflationRate', label: 'Inflation Rate (%)', help: 'Annual inflation for all recurring costs', placeholder: '3', visible: () => true },
-      { key: 'investmentReturnRate', label: 'Investment Return (%)', help: 'Expected return on investments', placeholder: '10', visible: () => true },
-      { key: 'include30Year', label: '30-Year Projections', help: 'yes/no - Show extended periods', placeholder: 'no', visible: () => true, toggleValues: ['yes', 'no'] },
+      { key: 'investmentReturnRate', label: 'Investment Return (%)', help: 'Expected return on investments. Market averages shown below', placeholder: '10', visible: () => true },
+      { key: 'include30Year', label: '30-Year Projections', help: 'Toggle to show 15y, 20y, 30y periods (default: 10y max)', placeholder: 'no', visible: () => true, toggleValues: ['yes', 'no'] },
 
-      { key: 'header_asset', label: '', help: '', placeholder: '', visible: () => true, isHeader: true, headerText: formInputs.scenario === 'sell_vs_keep' ? 'ASSET DETAILS' : 'BUYING' },
-      { key: 'purchasePrice', label: formInputs.scenario === 'sell_vs_keep' ? 'Original Purchase Price' : 'Purchase Price', help: 'Initial/original purchase price (use K/M)', placeholder: '500K', visible: () => true },
-      { key: 'currentMarketValue', label: 'Current Market Value', help: 'What the asset is worth today (use K/M)', placeholder: '2.2M', visible: () => formInputs.scenario === 'sell_vs_keep' },
-      { key: 'loanAmount', label: formInputs.scenario === 'sell_vs_keep' ? 'Original Loan Amount' : 'Loan Amount', help: 'Total mortgage/loan amount (use K/M)', placeholder: '400K', visible: () => true },
-      { key: 'loanRate', label: 'Loan Rate (%)', help: 'Annual interest rate', placeholder: '6.5', visible: () => true },
-      { key: 'loanTerm', label: 'Loan Term', help: 'Duration (e.g., 30y, 15y)', placeholder: '30y', visible: () => true },
+      { key: 'header_asset', label: '', help: '', placeholder: '', visible: () => true, isHeader: true, headerText: formInputs.scenario === 'sell_vs_keep' ? 'ASSET' : 'BUYING' },
+      { key: 'purchasePrice', label: formInputs.scenario === 'sell_vs_keep' ? 'Original Purchase Price' : 'Asset Purchase Price', help: formInputs.scenario === 'sell_vs_keep' ? 'What you originally paid for the asset (for capital gains)' : 'Initial purchase price of the asset', placeholder: '500K', visible: () => true },
+      { key: 'currentMarketValue', label: 'Current Market Value', help: 'What the asset is worth today', placeholder: '2.2M', visible: () => formInputs.scenario === 'sell_vs_keep' },
+      { key: 'loanAmount', label: formInputs.scenario === 'sell_vs_keep' ? 'Original Loan Amount' : 'Loan Amount', help: formInputs.scenario === 'sell_vs_keep' ? 'The original loan amount when purchased (we\'ll calculate remaining balance)' : 'Total mortgage/loan amount', placeholder: '400K', visible: () => true },
+      { key: 'loanRate', label: 'Loan Rate (%)', help: formInputs.scenario === 'sell_vs_keep' ? 'Annual interest rate on existing loan' : 'Annual interest rate (e.g., 6.5)', placeholder: '6.5', visible: () => true },
+      { key: 'loanTerm', label: 'Loan Term', help: formInputs.scenario === 'sell_vs_keep' ? 'Original loan duration when started (e.g., 30y)' : 'Loan duration (e.g., 5y, 30y)', placeholder: '30y', visible: () => true },
       { key: 'remainingLoanTerm', label: 'Remaining Loan Term', help: 'Time left on loan (e.g., 25y)', placeholder: '25y', visible: () => formInputs.scenario === 'sell_vs_keep' },
-      { key: 'annualInsurance', label: 'Annual Tax & Insurance', help: 'Yearly insurance + tax (use K/M)', placeholder: '3K', visible: () => true },
-      { key: 'annualTaxes', label: 'Other Annual Costs', help: 'HOA, maintenance, etc (use K/M)', placeholder: '5K', visible: () => true },
-      { key: 'monthlyExpenses', label: 'Monthly Expenses', help: 'Utilities, etc (can be negative, use K)', placeholder: '500', visible: () => true },
-      { key: 'appreciationRate', label: 'Appreciation Rate (%)', help: 'Annual rate, comma-separated (e.g., 10,5,3)', placeholder: '3', visible: () => true },
+      { key: 'annualInsurance', label: 'Annual Tax & Insurance', help: formInputs.scenario === 'sell_vs_keep' ? 'Yearly costs if keeping' : 'Yearly insurance cost', placeholder: '3K', visible: () => true },
+      { key: 'annualTaxes', label: 'Other Annual Costs', help: formInputs.scenario === 'sell_vs_keep' ? 'Taxes, HOA fees, etc. if keeping' : 'Maintenance costs, etc.', placeholder: '5K', visible: () => true },
+      { key: 'monthlyExpenses', label: 'Monthly Expenses', help: formInputs.scenario === 'sell_vs_keep' ? 'Monthly costs if keeping' : 'Monthly expenses. Typically include utilities, HOA, etc. Can be negative if earning income, e.g., -4K.', placeholder: '500', visible: () => true },
+      { key: 'appreciationRate', label: 'Appreciation Rate (%)', help: formInputs.scenario === 'sell_vs_keep' ? 'Annual rate if keeping. Comma-separated for different years' : 'Annual rate (can be negative for depreciation). Comma-separated values apply to first years, last value for all remaining years (e.g., \'10,5,3\' = 10% yr1, 5% yr2, 3% yr3+)', placeholder: '3', visible: () => true },
 
-      { key: 'header_renting', label: '', help: '', placeholder: '', visible: () => true, isHeader: true, headerText: formInputs.scenario === 'sell_vs_keep' ? 'INVESTING (IF SELLING)' : 'RENTING' },
-      { key: 'includeRentingSell', label: 'Include Renting (Sell)', help: 'yes/no - If selling means renting', placeholder: 'no', visible: () => formInputs.scenario === 'sell_vs_keep', toggleValues: ['yes', 'no'] },
-      { key: 'rentDeposit', label: 'Rental Deposit', help: 'Initial rental deposit (use K/M)', placeholder: '5K', visible: () => true },
-      { key: 'monthlyRent', label: 'Monthly Rent', help: 'Base monthly rent (use K/M)', placeholder: '3K', visible: () => true },
-      { key: 'annualRentCosts', label: 'Annual Rent Costs', help: 'Yearly rental-related costs (use K)', placeholder: '1K', visible: () => true },
-      { key: 'otherAnnualCosts', label: 'Other Annual Costs (Rent)', help: 'Additional yearly costs for renting', placeholder: '500', visible: () => formInputs.scenario === 'buy_vs_rent' },
+      { key: 'header_renting', label: '', help: '', placeholder: '', visible: () => true, isHeader: true, headerText: formInputs.scenario === 'sell_vs_keep' ? 'INVESTING' : 'RENTING' },
+      { key: 'includeRentingSell', label: 'Include Renting Analysis', help: 'Toggle if selling means you\'ll need to rent', placeholder: 'no', visible: () => formInputs.scenario === 'sell_vs_keep', toggleValues: ['yes', 'no'] },
+      { key: 'rentDeposit', label: 'Rental Deposit', help: formInputs.scenario === 'sell_vs_keep' ? 'Initial rental deposit if selling' : 'Initial rental deposit', placeholder: '5K', visible: () => true, disabled: () => formInputs.scenario === 'sell_vs_keep' && formInputs.includeRentingSell !== 'yes' },
+      { key: 'monthlyRent', label: 'Monthly Rent', help: formInputs.scenario === 'sell_vs_keep' ? 'Monthly rent if selling' : 'Base monthly rent amount', placeholder: '3K', visible: () => true, disabled: () => formInputs.scenario === 'sell_vs_keep' && formInputs.includeRentingSell !== 'yes' },
+      { key: 'annualRentCosts', label: 'Annual Rent Costs', help: formInputs.scenario === 'sell_vs_keep' ? 'Yearly rental costs if selling' : 'Yearly rental-related costs', placeholder: '1K', visible: () => true, disabled: () => formInputs.scenario === 'sell_vs_keep' && formInputs.includeRentingSell !== 'yes' },
+      { key: 'otherAnnualCosts', label: 'Other Annual Costs', help: 'Additional yearly costs for renting', placeholder: '500', visible: () => formInputs.scenario === 'buy_vs_rent' },
 
       { key: 'header_selling', label: '', help: '', placeholder: '', visible: () => true, isHeader: true, headerText: 'SELLING' },
-      { key: 'includeSelling', label: 'Include Selling', help: 'yes/no - Enable selling analysis', placeholder: 'no', visible: () => formInputs.scenario === 'buy_vs_rent', toggleValues: ['yes', 'no'] },
-      { key: 'agentCommission', label: 'Agent Commission (%)', help: 'Percentage of sale price', placeholder: '6', visible: () => true },
-      { key: 'stagingCosts', label: 'Staging/Selling Costs', help: 'Fixed costs to sell (use K/M)', placeholder: '10K', visible: () => true },
-      { key: 'taxFreeLimits', label: 'Tax-Free Gains Limit', help: 'Capital gains exempt (comma-separated, use K/M)', placeholder: '250K', visible: () => true },
-      { key: 'capitalGainsTax', label: 'Capital Gains Tax (%)', help: 'Long-term capital gains rate', placeholder: '20', visible: () => true },
+      { key: 'includeSelling', label: 'Include Selling Analysis', help: 'Toggle to enable/disable selling analysis', placeholder: 'no', visible: () => true, toggleValues: ['yes', 'no'] },
+      { key: 'agentCommission', label: 'Agent Commission (%)', help: 'Percentage of sale price paid to agents', placeholder: '6', visible: () => true, disabled: () => formInputs.includeSelling !== 'yes' },
+      { key: 'stagingCosts', label: 'Staging/Selling Costs', help: 'Fixed costs to prepare and sell', placeholder: '10K', visible: () => true, disabled: () => formInputs.includeSelling !== 'yes' },
+      { key: 'taxFreeLimits', label: 'Tax-Free Gains Limit', help: 'Capital gains exempt from tax. Comma-separated for different years (e.g., \'500K,0K\' = 500K year 1, 0 year 2+)', placeholder: '250K', visible: () => true, disabled: () => formInputs.includeSelling !== 'yes' },
+      { key: 'capitalGainsTax', label: 'Capital Gains Tax (%)', help: 'Long-term capital gains tax rate', placeholder: '20', visible: () => true, disabled: () => formInputs.includeSelling !== 'yes' },
     ];
   }
 
   $: visibleFields = fields.filter(f => f.visible());
+  $: currentHelpText = visibleFields[currentFieldIndex]?.help || '';
 
   function handleKeyDown(event: KeyboardEvent) {
     const currentField = visibleFields[currentFieldIndex];
@@ -108,8 +110,8 @@
 
   function moveToNextField() {
     let nextIndex = currentFieldIndex + 1;
-    // Skip headers
-    while (nextIndex < visibleFields.length && visibleFields[nextIndex].isHeader) {
+    // Skip headers and disabled fields
+    while (nextIndex < visibleFields.length && (visibleFields[nextIndex].isHeader || (visibleFields[nextIndex].disabled && visibleFields[nextIndex].disabled()))) {
       nextIndex++;
     }
     if (nextIndex < visibleFields.length) {
@@ -120,8 +122,8 @@
 
   function moveToPreviousField() {
     let prevIndex = currentFieldIndex - 1;
-    // Skip headers
-    while (prevIndex >= 0 && visibleFields[prevIndex].isHeader) {
+    // Skip headers and disabled fields
+    while (prevIndex >= 0 && (visibleFields[prevIndex].isHeader || (visibleFields[prevIndex].disabled && visibleFields[prevIndex].disabled()))) {
       prevIndex--;
     }
     if (prevIndex >= 0) {
@@ -134,8 +136,10 @@
     setTimeout(() => {
       const input = inputRefs[currentFieldIndex];
       if (input) {
-        input.focus();
+        input.focus({ preventScroll: true });
         input.select();
+        // Scroll the field into view within the terminal-content container
+        input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }, 0);
   }
@@ -182,36 +186,55 @@
     }
   }
 
+  function handleContainerClick() {
+    // Refocus current field when clicking anywhere in the container
+    focusCurrentField();
+  }
+
+  function handleGlobalKeyDown(event: KeyboardEvent) {
+    // Capture arrow keys globally to prevent page scrolling
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      // If no input is focused, focus the current field
+      const activeElement = document.activeElement;
+      const isInputFocused = inputRefs.some(ref => ref === activeElement);
+      if (!isInputFocused) {
+        event.preventDefault();
+        focusCurrentField();
+      }
+    }
+  }
+
   onMount(() => {
-    // Find first non-header field to focus
+    // Find first non-header, non-disabled field to focus
     let firstFieldIndex = 0;
-    while (firstFieldIndex < visibleFields.length && visibleFields[firstFieldIndex].isHeader) {
+    while (firstFieldIndex < visibleFields.length &&
+           (visibleFields[firstFieldIndex].isHeader ||
+            (visibleFields[firstFieldIndex].disabled && visibleFields[firstFieldIndex].disabled()))) {
       firstFieldIndex++;
     }
     currentFieldIndex = firstFieldIndex;
     focusCurrentField();
+
+    // Add global keyboard handler
+    window.addEventListener('keydown', handleGlobalKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
   });
 </script>
 
-<div class="terminal-container font-mono">
-  <div class="mb-6 border-l-2 border-monokai-purple pl-3 py-2">
-    <div class="mb-1 text-monokai-text text-sm">
-      <span class="text-monokai-purple">⌨</span> Navigation: <span class="text-monokai-cyan">↑↓</span> arrows to move | <span class="text-monokai-cyan">Ctrl+Enter</span> to calculate
-    </div>
-    <div class="text-monokai-text-muted text-xs">
-      Field <span class="text-monokai-pink">{currentFieldIndex + 1}</span>/<span class="text-monokai-cyan">{visibleFields.length}</span>
-    </div>
-  </div>
-
-  <form on:submit|preventDefault={handleSubmit} class="space-y-1">
+<div class="terminal-container font-mono" on:click={handleContainerClick}>
+  <div class="terminal-content">
+    <form on:submit|preventDefault={handleSubmit} class="space-y-1">
     {#each visibleFields as field, index}
       {#if field.isHeader}
         <div class="section-header">
           <span class="text-monokai-orange">{field.headerText}</span>
         </div>
       {:else}
-        <div class="terminal-field" class:focused={index === currentFieldIndex}>
-          <div class="flex items-center gap-4">
+        <div class="terminal-field" class:focused={index === currentFieldIndex} class:disabled={field.disabled && field.disabled()}>
+          <div class="flex items-center gap-2">
             <div class="field-label w-72 flex-shrink-0">
               <span class="text-monokai-pink">{index === currentFieldIndex ? '>' : ' '}</span>
               <span class="ml-2" class:text-monokai-pink={index === currentFieldIndex} class:text-monokai-text={index !== currentFieldIndex}>{field.label}:</span>
@@ -225,41 +248,86 @@
                 on:focus={() => handleFieldFocus(index)}
                 placeholder={field.placeholder}
                 class="terminal-input w-full"
+                disabled={field.disabled && field.disabled()}
               />
-            </div>
-            <div class="field-help w-96 flex-shrink-0 text-monokai-text-muted text-xs">
-              {field.help}
             </div>
           </div>
         </div>
       {/if}
     {/each}
 
-    <div class="mt-8 pt-4 border-t border-monokai-border">
-      <button type="submit" class="terminal-button">
-        <span class="text-monokai-green">$</span> ./calculate --run
-      </button>
+    </form>
+  </div>
+
+  <!-- Help Text Section - Fixed at bottom -->
+  <div class="help-section">
+    <div class="help-header">
+      <div class="help-nav">
+        <span class="text-monokai-cyan">↑↓</span> arrows to move | <span class="text-monokai-cyan">Ctrl+Enter</span> to <button type="button" on:click={handleSubmit} class="calculate-link">calculate</button>
+      </div>
+      <div class="help-field-counter">
+        Field <span class="text-monokai-pink">{currentFieldIndex + 1}</span>/<span class="text-monokai-cyan">{visibleFields.length}</span>
+      </div>
     </div>
-  </form>
+    <div class="help-content">{currentHelpText || 'Navigate through fields using arrow keys'}</div>
+  </div>
 </div>
 
 <style>
   .terminal-container {
     background: #000;
-    padding: 2rem;
+    padding: 1rem;
     border: 2px solid #2d2d2d;
     border-radius: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    height: 80vh;
+    max-height: 80vh;
+  }
+
+  .terminal-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .terminal-content::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .terminal-content::-webkit-scrollbar-track {
+    background: #0a0a0a;
+  }
+
+  .terminal-content::-webkit-scrollbar-thumb {
+    background: #2d2d2d;
+    border-radius: 4px;
+  }
+
+  .terminal-content::-webkit-scrollbar-thumb:hover {
+    background: #3d3d3d;
   }
 
   .terminal-field {
-    padding: 0.25rem 1rem;
+    padding: 0.125rem 0.75rem;
     transition: all 0.15s;
-    border-left: 3px solid transparent;
+    border-left: 2px solid transparent;
+    font-size: 0.8rem;
   }
 
   .terminal-field.focused {
     background-color: #0a0a0a;
     border-left-color: #FF6188;
+  }
+
+  .terminal-field.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .field-label {
+    font-size: 0.8rem;
   }
 
   .terminal-input {
@@ -268,8 +336,8 @@
     outline: none;
     color: #FCFCFA;
     font-family: 'Fira Code', monospace;
-    font-size: 0.95rem;
-    padding: 0.125rem 0;
+    font-size: 0.8rem;
+    padding: 0.1rem 0;
   }
 
   .terminal-input::placeholder {
@@ -277,33 +345,56 @@
     font-style: italic;
   }
 
-  .terminal-input:focus {
-    border-bottom: 1px solid #FF6188;
-  }
-
-  .terminal-button {
-    background: transparent;
-    border: 2px solid #78DCE8;
-    color: #78DCE8;
-    padding: 0.75rem 2rem;
-    border-radius: 0.375rem;
-    font-family: 'Fira Code', monospace;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .terminal-button:hover {
-    background: #78DCE8;
-    color: #000;
-  }
-
   .section-header {
-    margin-top: 1rem;
-    margin-bottom: 0.25rem;
-    padding: 0.25rem 1rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.125rem;
+    padding: 0.125rem 0.75rem;
     font-weight: bold;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     letter-spacing: 0.05em;
     border-bottom: 1px solid #2d2d2d;
+  }
+
+  .help-section {
+    padding: 0.5rem 1rem;
+    background-color: #0a0a0a;
+    border-top: 1px solid #2d2d2d;
+    flex-shrink: 0;
+  }
+
+  .help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.375rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #2d2d2d;
+  }
+
+  .help-nav {
+    color: #FCFCFA;
+    font-size: 0.75rem;
+  }
+
+  .help-field-counter {
+    color: #939293;
+    font-size: 0.7rem;
+  }
+
+  .help-content {
+    color: #939293;
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .calculate-link {
+    background: none;
+    border: none;
+    color: #78DCE8;
+    text-decoration: none;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
   }
 </style>

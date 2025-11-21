@@ -42,12 +42,40 @@
     const saved = localStorage.getItem('rentobuy_inputs');
     if (saved) {
       try {
-        formInputs = { ...formInputs, ...JSON.parse(saved) };
+        const loadedInputs = JSON.parse(saved);
+        // Normalize boolean values to 'yes'/'no' strings
+        const normalizeBoolean = (val: any) => {
+          if (typeof val === 'boolean') return val ? 'yes' : 'no';
+          if (val === 'true') return 'yes';
+          if (val === 'false') return 'no';
+          return val;
+        };
+        if (loadedInputs.includeSelling !== undefined) {
+          loadedInputs.includeSelling = normalizeBoolean(loadedInputs.includeSelling);
+        }
+        if (loadedInputs.includeRentingSell !== undefined) {
+          loadedInputs.includeRentingSell = normalizeBoolean(loadedInputs.includeRentingSell);
+        }
+        if (loadedInputs.include30Year !== undefined) {
+          loadedInputs.include30Year = normalizeBoolean(loadedInputs.include30Year);
+        }
+        formInputs = { ...formInputs, ...loadedInputs };
       } catch (e) {
         console.error('Failed to load saved inputs:', e);
       }
     }
   });
+
+  // Update body overflow based on whether we're showing results
+  $: {
+    if (typeof document !== 'undefined') {
+      if (showResults) {
+        document.body.style.overflow = 'auto';
+      } else {
+        document.body.style.overflow = 'hidden';
+      }
+    }
+  }
 
   function handleCalculate(event: CustomEvent) {
     try {

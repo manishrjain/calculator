@@ -56,7 +56,7 @@
   }
 
   .data-table th {
-    @apply px-4 py-1 text-left font-semibold text-monokai-cyan;
+    @apply px-4 py-1 font-semibold text-monokai-cyan;
   }
 
   .data-table td {
