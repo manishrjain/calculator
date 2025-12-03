@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CalculatorInputs, CalculationResults } from '../types';
   import { formatCurrency as formatCurrencyBase, formatPercent } from '../lib/formatter';
+  import MarketDataTable from './MarketDataTable.svelte';
 
   export let inputs: CalculatorInputs;
   export let results: CalculationResults;
@@ -178,6 +179,9 @@
       </div>
     {/if}
   </section>
+
+  <!-- Market Data Reference -->
+  <MarketDataTable />
 
   <!-- Amortization Table -->
   {#if results.amortizationTable && inputs.loanAmount > 0}
