@@ -4,47 +4,51 @@
 
 @layer base {
   * {
-    @apply border-monokai-border;
+    @apply dark:border-monokai-border border-light-border;
   }
 
   body {
-    @apply bg-black text-monokai-text;
-    font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+    @apply bg-light-bg text-light-text dark:bg-black dark:text-monokai-text;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', 'Courier New', monospace;
     font-feature-settings: "liga" 1, "calt" 1;
   }
 
   ::selection {
-    background-color: #FF6188;
-    color: #000;
+    @apply dark:bg-monokai-pink dark:text-black bg-light-pink text-white;
   }
 }
 
 @layer components {
   .input-field {
-    @apply bg-monokai-bg border-2 border-monokai-border rounded-lg px-4 py-3 text-monokai-text;
-    @apply focus:outline-none focus:ring-2 focus:ring-monokai-pink focus:border-monokai-pink;
+    @apply bg-light-bg border-2 border-light-border rounded-lg px-4 py-3 text-light-text;
+    @apply dark:bg-monokai-bg dark:border-monokai-border dark:text-monokai-text;
+    @apply focus:outline-none focus:ring-2 focus:ring-light-pink focus:border-light-pink;
+    @apply dark:focus:ring-monokai-pink dark:focus:border-monokai-pink;
     @apply transition-all duration-200;
-    @apply hover:border-monokai-pink/50;
+    @apply hover:border-light-pink/50 dark:hover:border-monokai-pink/50;
   }
 
   .btn-primary {
-    @apply bg-gradient-to-r from-monokai-pink to-monokai-orange text-white px-8 py-4 rounded-lg font-bold;
+    @apply bg-gradient-to-r from-light-pink to-light-orange text-white px-8 py-4 rounded-lg font-bold;
+    @apply dark:from-monokai-pink dark:to-monokai-orange;
     @apply hover:shadow-lg hover:scale-105 transition-all duration-200;
     @apply shadow-md;
   }
 
   .btn-secondary {
-    @apply bg-monokai-bg-light text-monokai-text px-6 py-3 rounded-lg font-semibold border-2 border-monokai-border;
-    @apply hover:border-monokai-cyan hover:bg-monokai-border transition-all duration-200;
+    @apply bg-light-bg-light text-light-text px-6 py-3 rounded-lg font-semibold border-2 border-light-border;
+    @apply dark:bg-monokai-bg-light dark:text-monokai-text dark:border-monokai-border;
+    @apply hover:border-light-cyan hover:bg-light-border dark:hover:border-monokai-cyan dark:hover:bg-monokai-border transition-all duration-200;
   }
 
   .terminal-back-button {
-    @apply bg-transparent text-monokai-cyan px-4 py-2 border-2 border-monokai-border rounded;
-    @apply hover:border-monokai-cyan hover:bg-monokai-bg-light transition-all duration-200;
+    @apply bg-transparent text-light-cyan px-4 py-2 border-2 border-light-border rounded;
+    @apply dark:text-monokai-cyan dark:border-monokai-border;
+    @apply hover:border-light-cyan hover:bg-light-bg-light dark:hover:border-monokai-cyan dark:hover:bg-monokai-bg-light transition-all duration-200;
   }
 
   .table-container {
-    @apply overflow-x-auto rounded-lg border border-monokai-border;
+    @apply overflow-x-auto rounded-lg border border-light-border dark:border-monokai-border;
   }
 
   .data-table {
@@ -52,40 +56,41 @@
   }
 
   .data-table thead {
-    @apply bg-monokai-bg-light;
+    @apply bg-light-bg-light dark:bg-monokai-bg-light;
   }
 
   .data-table th {
-    @apply px-4 py-1 font-semibold text-monokai-cyan;
+    @apply px-4 py-1 font-semibold text-light-cyan dark:text-monokai-cyan;
   }
 
   .data-table td {
-    @apply px-4 py-1 border-t border-monokai-border;
+    @apply px-4 py-1 border-t border-light-border dark:border-monokai-border;
   }
 
   .data-table tr:hover {
-    @apply bg-monokai-bg-light;
+    @apply bg-light-bg-light dark:bg-monokai-bg-light;
   }
 
   .section-title {
-    @apply text-3xl font-bold text-monokai-pink mb-6;
+    @apply text-3xl font-bold text-light-pink dark:text-monokai-pink mb-6;
   }
 
   .group-title {
-    @apply text-xl font-bold text-monokai-orange mb-4 flex items-center gap-2 font-mono;
+    @apply text-xl font-bold text-light-orange dark:text-monokai-orange mb-4 flex items-center gap-2 font-mono;
   }
 
   .label {
-    @apply text-monokai-cyan font-semibold mb-2 block text-sm tracking-wide font-mono;
+    @apply text-light-cyan dark:text-monokai-cyan font-semibold mb-2 block text-sm tracking-wide font-mono;
   }
 
   .help-text {
-    @apply text-xs text-monokai-text-muted mt-1 leading-relaxed;
+    @apply text-xs text-light-text-muted dark:text-monokai-text-muted mt-1 leading-relaxed;
   }
 
   .form-section {
-    @apply bg-gradient-to-br from-monokai-bg-light to-monokai-bg p-8 rounded-xl border-2 border-monokai-border;
-    @apply hover:border-monokai-pink/30 transition-all duration-300;
+    @apply bg-gradient-to-br from-light-bg-light to-light-bg p-8 rounded-xl border-2 border-light-border;
+    @apply dark:from-monokai-bg-light dark:to-monokai-bg dark:border-monokai-border;
+    @apply hover:border-light-pink/30 dark:hover:border-monokai-pink/30 transition-all duration-300;
     @apply shadow-lg;
   }
 
@@ -98,7 +103,7 @@
   }
 
   .toggle-slider {
-    @apply absolute cursor-pointer inset-0 bg-monokai-border rounded-full transition-all;
+    @apply absolute cursor-pointer inset-0 bg-light-border dark:bg-monokai-border rounded-full transition-all;
   }
 
   .toggle-slider:before {
@@ -106,7 +111,7 @@
   }
 
   input:checked + .toggle-slider {
-    @apply bg-monokai-pink;
+    @apply bg-light-pink dark:bg-monokai-pink;
   }
 
   input:checked + .toggle-slider:before {

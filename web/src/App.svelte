@@ -4,6 +4,8 @@
   import { calculate } from './lib/calculator';
   import TerminalForm from './components/TerminalForm.svelte';
   import ResultsDisplay from './components/ResultsDisplay.svelte';
+  import ThemeToggle from './components/ThemeToggle.svelte';
+  import { theme } from './lib/theme';
 
   // String versions for form binding
   let formInputs = {
@@ -46,6 +48,9 @@
   }
 
   onMount(() => {
+    // Initialize theme
+    theme.initialize();
+
     // Load saved inputs from localStorage
     const saved = localStorage.getItem('rentobuy_inputs');
     if (saved) {
@@ -119,18 +124,21 @@
   }
 </script>
 
-<main class="min-h-screen bg-black text-monokai-text p-4 md:p-8">
+<main class="min-h-screen bg-light-bg dark:bg-black text-light-text dark:text-monokai-text p-4 md:p-8">
   <div class="max-w-7xl mx-auto">
     <header class="mb-8">
-      <div class="border-2 border-monokai-border rounded-lg p-4 bg-black">
-        <div class="flex items-center gap-2 mb-2 text-xs font-mono">
-          <span class="text-monokai-pink">$</span>
-          <span class="text-monokai-text">./calculator</span>
+      <div class="border-2 border-light-border dark:border-monokai-border rounded-lg p-4 bg-light-bg dark:bg-black">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2 text-xs font-mono">
+            <span class="text-light-pink dark:text-monokai-pink">$</span>
+            <span class="text-light-text dark:text-monokai-text">./calculator</span>
+          </div>
+          <ThemeToggle />
         </div>
-        <h1 class="text-2xl font-bold text-monokai-orange font-mono">
+        <h1 class="text-2xl font-bold text-light-orange dark:text-monokai-orange font-mono">
           BRSK Calculator: Buy v Rent / Sell v Keep
         </h1>
-        <div class="mt-2 text-xs text-monokai-text-muted">
+        <div class="mt-2 text-xs text-light-text-muted dark:text-monokai-text-muted">
           Make a calculated decision
         </div>
       </div>

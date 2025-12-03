@@ -300,14 +300,14 @@
     {#each visibleFields as field, index}
       {#if field.isHeader}
         <div class="section-header">
-          <span class="text-monokai-orange">{field.headerText}</span>
+          <span class="text-light-orange dark:text-monokai-orange">{field.headerText}</span>
         </div>
       {:else}
         <div class="terminal-field" class:focused={index === currentFieldIndex} class:disabled={field.disabled && field.disabled()}>
           <div class="flex items-center gap-2">
             <div class="field-label w-72 flex-shrink-0">
-              <span class="text-monokai-pink">{index === currentFieldIndex ? '>' : ' '}</span>
-              <span class="ml-2" class:text-monokai-pink={index === currentFieldIndex} class:text-monokai-text={index !== currentFieldIndex}>{field.label}:</span>
+              <span class="text-light-pink dark:text-monokai-pink">{index === currentFieldIndex ? '>' : ' '}</span>
+              <span class="ml-2" class:text-light-pink={index === currentFieldIndex} class:dark:text-monokai-pink={index === currentFieldIndex} class:text-light-text={index !== currentFieldIndex} class:dark:text-monokai-text={index !== currentFieldIndex}>{field.label}:</span>
             </div>
             <div class="field-input flex-1 min-w-0">
               <input
@@ -334,10 +334,10 @@
   <div class="help-section">
     <div class="help-header">
       <div class="help-nav">
-        <span class="text-monokai-cyan">↑↓</span> arrows to move | <span class="text-monokai-cyan">Ctrl+Enter</span> to <button type="button" on:click={handleSubmit} class="calculate-link">calculate</button>
+        <span class="text-light-cyan dark:text-monokai-cyan">↑↓</span> arrows to move | <span class="text-light-cyan dark:text-monokai-cyan">Ctrl+Enter</span> to <button type="button" on:click={handleSubmit} class="calculate-link">calculate</button>
       </div>
       <div class="help-field-counter">
-        Field <span class="text-monokai-pink">{currentFieldIndex + 1}</span>/<span class="text-monokai-cyan">{visibleFields.length}</span>
+        Field <span class="text-light-pink dark:text-monokai-pink">{currentFieldIndex + 1}</span>/<span class="text-light-cyan dark:text-monokai-cyan">{visibleFields.length}</span>
       </div>
     </div>
     <div class="help-content">{currentHelpText || 'Navigate through fields using arrow keys'}</div>
@@ -346,9 +346,9 @@
 
 <style>
   .terminal-container {
-    background: #000;
+    @apply bg-light-bg dark:bg-black;
     padding: 1rem;
-    border: 2px solid #2d2d2d;
+    @apply border-2 border-light-border dark:border-monokai-border;
     border-radius: 0.5rem;
     display: flex;
     flex-direction: column;
@@ -367,29 +367,47 @@
     width: 6px;
   }
 
-  .terminal-content::-webkit-scrollbar-track {
+  :global(.dark) .terminal-content::-webkit-scrollbar-track {
     background: #0a0a0a;
   }
 
-  .terminal-content::-webkit-scrollbar-thumb {
+  :global(:not(.dark)) .terminal-content::-webkit-scrollbar-track {
+    background: #f4f4f5;
+  }
+
+  :global(.dark) .terminal-content::-webkit-scrollbar-thumb {
     background: #2d2d2d;
     border-radius: 4px;
   }
 
-  .terminal-content::-webkit-scrollbar-thumb:hover {
+  :global(:not(.dark)) .terminal-content::-webkit-scrollbar-thumb {
+    background: #d4d4d8;
+    border-radius: 4px;
+  }
+
+  :global(.dark) .terminal-content::-webkit-scrollbar-thumb:hover {
     background: #3d3d3d;
+  }
+
+  :global(:not(.dark)) .terminal-content::-webkit-scrollbar-thumb:hover {
+    background: #a1a1aa;
   }
 
   .terminal-field {
     padding: 0.125rem 0.75rem;
     transition: all 0.15s;
     border-left: 2px solid transparent;
-    font-size: 0.8rem;
+    font-size: 0.875rem;
   }
 
   .terminal-field.focused {
-    background-color: #0a0a0a;
+    border-left-color: #D91B5B;
+    background-color: #f4f4f5;
+  }
+
+  :global(.dark) .terminal-field.focused {
     border-left-color: #FF6188;
+    background-color: transparent;
   }
 
   .terminal-field.disabled {
@@ -398,21 +416,28 @@
   }
 
   .field-label {
-    font-size: 0.8rem;
+    font-size: 0.875rem;
+    font-weight: 600;
   }
 
   .terminal-input {
     background: transparent;
     border: none;
     outline: none;
-    color: #FCFCFA;
-    font-family: 'Fira Code', monospace;
-    font-size: 0.8rem;
+    @apply text-light-text dark:text-monokai-text;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    font-weight: 600;
     padding: 0.1rem 0;
   }
 
-  .terminal-input::placeholder {
+  :global(.dark) .terminal-input::placeholder {
     color: #5c5c5c;
+    font-style: italic;
+  }
+
+  :global(:not(.dark)) .terminal-input::placeholder {
+    color: #a1a1aa;
     font-style: italic;
   }
 
@@ -420,16 +445,16 @@
     margin-top: 0.5rem;
     margin-bottom: 0.125rem;
     padding: 0.125rem 0.75rem;
-    font-weight: bold;
-    font-size: 0.75rem;
+    font-weight: 700;
+    font-size: 0.8125rem;
     letter-spacing: 0.05em;
-    border-bottom: 1px solid #2d2d2d;
+    @apply border-b border-light-border dark:border-monokai-border;
   }
 
   .help-section {
     padding: 0.5rem 1rem;
-    background-color: #0a0a0a;
-    border-top: 1px solid #2d2d2d;
+    @apply bg-light-bg-light dark:bg-[#0a0a0a];
+    @apply border-t border-light-border dark:border-monokai-border;
     flex-shrink: 0;
   }
 
@@ -439,29 +464,32 @@
     align-items: center;
     margin-bottom: 0.375rem;
     padding-bottom: 0.25rem;
-    border-bottom: 1px solid #2d2d2d;
+    @apply border-b border-light-border dark:border-monokai-border;
   }
 
   .help-nav {
-    color: #FCFCFA;
-    font-size: 0.75rem;
+    @apply text-light-text dark:text-monokai-text;
+    font-size: 0.8125rem;
+    font-weight: 600;
   }
 
   .help-field-counter {
-    color: #939293;
-    font-size: 0.7rem;
+    @apply text-light-text-muted dark:text-monokai-text-muted;
+    font-size: 0.8125rem;
+    font-weight: 600;
   }
 
   .help-content {
-    color: #939293;
-    font-size: 0.75rem;
+    @apply text-light-text-muted dark:text-monokai-text-muted;
+    font-size: 0.8125rem;
+    font-weight: 600;
     line-height: 1.4;
   }
 
   .calculate-link {
     background: none;
     border: none;
-    color: #78DCE8;
+    @apply text-light-cyan dark:text-monokai-cyan;
     text-decoration: none;
     cursor: pointer;
     padding: 0;
