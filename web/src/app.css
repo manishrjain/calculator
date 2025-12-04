@@ -3,8 +3,14 @@
 @tailwind utilities;
 
 @layer base {
-  * {
+  *, *::before, *::after {
+    box-sizing: border-box;
     @apply dark:border-monokai-border border-light-border;
+  }
+
+  html, body {
+    @apply overflow-x-hidden;
+    max-width: 100vw;
   }
 
   body {

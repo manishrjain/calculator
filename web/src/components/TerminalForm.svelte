@@ -80,6 +80,8 @@
     ? 'use k for thousand, m for million (e.g., 500k, 2.5m)'
     : currentFieldType === 'duration'
     ? 'use y for years, m for months (e.g., 29y6m)'
+    : currentFieldType === 'toggle'
+    ? 'tap to toggle, or use ← → arrow keys'
     : '';
 
   // Market averages for investment return rate field
@@ -131,6 +133,12 @@
 
     // Toggle to the other value
     formInputs[field.key] = currentValue === value1 ? value2 : value1;
+  }
+
+  function handleToggleClick(field: FormField) {
+    if (field.toggleValues && field.toggleValues.length === 2) {
+      toggleFieldValue(field);
+    }
   }
 
   function moveToNextField() {
@@ -326,38 +334,66 @@
           <span class="text-light-orange dark:text-monokai-orange">{field.headerText}</span>
         </div>
         {#if field.key === 'header_economic'}
-          <div class="market-averages-inline">
-            <span class="text-light-text-muted dark:text-monokai-text-muted">Market Avg (10y):</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Inflation</span> {marketAvg.inflation.toFixed(1)}%,
-            <span class="text-light-cyan dark:text-monokai-cyan">VOO</span> {marketAvg.voo.toFixed(1)}%,
-            <span class="text-light-cyan dark:text-monokai-cyan">QQQ</span> {marketAvg.qqq.toFixed(1)}%,
-            <span class="text-light-cyan dark:text-monokai-cyan">VTI</span> {marketAvg.vti.toFixed(1)}%,
-            <span class="text-light-cyan dark:text-monokai-cyan">BND</span> {marketAvg.bnd.toFixed(1)}%,
-            <span class="text-light-cyan dark:text-monokai-cyan">60/40</span> {marketAvg.mix6040.toFixed(1)}%
-            <span class="text-light-text-muted dark:text-monokai-text-muted ml-2">(Updated {new Date(getLastUpdated()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})</span>
+          <div class="market-averages-inline break-words">
+            <div class="mb-1"><span class="text-light-text-muted dark:text-monokai-text-muted">Market Avg (10y):</span></div>
+            <div class="flex flex-wrap gap-x-2 gap-y-0.5">
+              <span><span class="text-light-cyan dark:text-monokai-cyan">Inflation</span> {marketAvg.inflation.toFixed(1)}%,</span>
+              <span><span class="text-light-cyan dark:text-monokai-cyan">VOO</span> {marketAvg.voo.toFixed(1)}%,</span>
+              <span><span class="text-light-cyan dark:text-monokai-cyan">QQQ</span> {marketAvg.qqq.toFixed(1)}%,</span>
+              <span><span class="text-light-cyan dark:text-monokai-cyan">VTI</span> {marketAvg.vti.toFixed(1)}%,</span>
+              <span><span class="text-light-cyan dark:text-monokai-cyan">BND</span> {marketAvg.bnd.toFixed(1)}%,</span>
+              <span><span class="text-light-cyan dark:text-monokai-cyan">60/40</span> {marketAvg.mix6040.toFixed(1)}%</span>
+            </div>
+            <div class="text-light-text-muted dark:text-monokai-text-muted mt-0.5">(Updated {new Date(getLastUpdated()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})</div>
           </div>
         {/if}
       {:else}
         <div class="terminal-field" class:focused={index === currentFieldIndex} class:disabled={field.disabled && field.disabled()}>
-          <div class="flex items-center gap-2">
-            <div class="field-label w-72 flex-shrink-0">
+          <div class="flex flex-col md:flex-row md:items-center gap-1 md:gap-2">
+            <div class="field-label md:w-72 md:flex-shrink-0">
               <span class="text-light-pink dark:text-monokai-pink">{index === currentFieldIndex ? '>' : ' '}</span>
               <span class="ml-2" class:text-light-pink={index === currentFieldIndex} class:dark:text-monokai-pink={index === currentFieldIndex} class:text-light-text={index !== currentFieldIndex} class:dark:text-monokai-text={index !== currentFieldIndex}>{field.label}:</span>
             </div>
-            <div class="field-input flex-1 min-w-0">
-              <input
-                type="text"
-                bind:value={formInputs[field.key]}
-                bind:this={inputRefs[index]}
-                on:keydown={handleKeyDown}
-                on:focus={() => handleFieldFocus(index)}
-                on:blur={() => validateAndResetField(field)}
-                placeholder={field.placeholder}
-                class="terminal-input w-full"
-                disabled={field.disabled && field.disabled()}
-                readonly={field.fieldType === 'toggle'}
-              />
+            <div class="field-input flex-1 min-w-0 ml-6 md:ml-0">
+              {#if field.fieldType === 'toggle'}
+                <input
+                  type="text"
+                  bind:value={formInputs[field.key]}
+                  bind:this={inputRefs[index]}
+                  on:keydown={handleKeyDown}
+                  on:focus={() => handleFieldFocus(index)}
+                  on:blur={() => validateAndResetField(field)}
+                  on:click={() => handleToggleClick(field)}
+                  placeholder={field.placeholder}
+                  class="terminal-input terminal-input-toggle w-full"
+                  disabled={field.disabled && field.disabled()}
+                  readonly
+                />
+              {:else}
+                <input
+                  type="text"
+                  bind:value={formInputs[field.key]}
+                  bind:this={inputRefs[index]}
+                  on:keydown={handleKeyDown}
+                  on:focus={() => handleFieldFocus(index)}
+                  on:blur={() => validateAndResetField(field)}
+                  placeholder={field.placeholder}
+                  class="terminal-input w-full"
+                  disabled={field.disabled && field.disabled()}
+                />
+              {/if}
             </div>
+          </div>
+          <!-- Inline help text for mobile -->
+          <div class="field-help-mobile">
+            <span class="text-light-green dark:text-monokai-green">{field.help}</span>
+            {#if field.fieldType === 'currency'}
+              <span class="text-light-text-muted dark:text-monokai-text-muted"> | use k for thousand, m for million (e.g., 500k, 2.5m)</span>
+            {:else if field.fieldType === 'duration'}
+              <span class="text-light-text-muted dark:text-monokai-text-muted"> | use y for years, m for months (e.g., 29y6m)</span>
+            {:else if field.fieldType === 'toggle'}
+              <span class="text-light-text-muted dark:text-monokai-text-muted"> | tap to toggle</span>
+            {/if}
           </div>
         </div>
       {/if}
@@ -366,7 +402,7 @@
     </form>
   </div>
 
-  <!-- Help Text Section - Fixed at bottom -->
+  <!-- Help Text Section - Desktop -->
   <div class="help-section">
     <div class="help-header">
       <div class="help-nav">
@@ -383,20 +419,40 @@
 <style>
   .terminal-container {
     @apply bg-light-bg dark:bg-black;
-    padding: 1rem;
+    padding: 0.5rem;
+    padding-bottom: 0;
     @apply border-2 border-light-border dark:border-monokai-border;
     border-radius: 0.5rem;
     display: flex;
     flex-direction: column;
-    height: 80vh;
-    max-height: 80vh;
+    min-height: 60vh;
+    max-width: 100%;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  @media (min-width: 768px) {
+    .terminal-container {
+      padding: 1rem;
+      padding-bottom: 0;
+      height: 80vh;
+      max-height: 80vh;
+    }
   }
 
   .terminal-content {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding-right: 0.5rem;
-    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    max-width: 100%;
+  }
+
+  @media (min-width: 768px) {
+    .terminal-content {
+      margin-bottom: 0.5rem;
+    }
   }
 
   .terminal-content::-webkit-scrollbar {
@@ -430,10 +486,19 @@
   }
 
   .terminal-field {
-    padding: 0.125rem 0.75rem;
+    padding: 0.125rem 0.5rem;
     transition: all 0.15s;
     border-left: 2px solid transparent;
-    font-size: 0.875rem;
+    font-size: 14px;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  @media (min-width: 768px) {
+    .terminal-field {
+      padding: 0.125rem 0.75rem;
+      font-size: 0.875rem;
+    }
   }
 
   .terminal-field.focused {
@@ -452,8 +517,16 @@
   }
 
   .field-label {
-    font-size: 0.875rem;
+    font-size: 14px;
     font-weight: 600;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  @media (min-width: 768px) {
+    .field-label {
+      font-size: 0.875rem;
+    }
   }
 
   .terminal-input {
@@ -462,9 +535,30 @@
     outline: none;
     @apply text-light-text dark:text-monokai-text;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.875rem;
+    font-size: 16px; /* Must be 16px or larger to prevent mobile zoom */
     font-weight: 600;
     padding: 0.1rem 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  @media (min-width: 768px) {
+    .terminal-input {
+      font-size: 0.875rem;
+    }
+  }
+
+  .terminal-input-toggle {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    caret-color: transparent;
+  }
+
+  .terminal-input-toggle:focus {
+    outline: none;
   }
 
   :global(.dark) .terminal-input::placeholder {
@@ -480,18 +574,53 @@
   .section-header {
     margin-top: 0.5rem;
     margin-bottom: 0.125rem;
-    padding: 0.125rem 0.75rem;
+    padding: 0.125rem 0.5rem;
     font-weight: 700;
-    font-size: 0.8125rem;
+    font-size: 12px;
     letter-spacing: 0.05em;
     @apply border-b border-light-border dark:border-monokai-border;
   }
 
-  .help-section {
-    padding: 0.5rem 1rem;
+  @media (min-width: 768px) {
+    .section-header {
+      padding: 0.125rem 0.75rem;
+      font-size: 0.8125rem;
+    }
+  }
+
+  .field-help-mobile {
+    display: block;
+    margin-top: 0.25rem;
+    margin-left: 1.5rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 11px;
+    line-height: 1.4;
     @apply bg-light-bg-light dark:bg-[#0a0a0a];
-    @apply border-t border-light-border dark:border-monokai-border;
-    flex-shrink: 0;
+    border-left: 2px solid;
+    @apply border-light-green dark:border-monokai-green;
+    border-radius: 0 0.25rem 0.25rem 0;
+  }
+
+  @media (min-width: 768px) {
+    .field-help-mobile {
+      display: none;
+    }
+  }
+
+  .help-section {
+    display: none;
+  }
+
+  @media (min-width: 768px) {
+    .help-section {
+      display: block;
+      padding: 0.5rem 1rem;
+      @apply bg-light-bg-light dark:bg-[#0a0a0a];
+      @apply border-t border-light-border dark:border-monokai-border;
+      flex-shrink: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
   }
 
   .help-header {
@@ -505,14 +634,30 @@
 
   .help-nav {
     @apply text-light-text dark:text-monokai-text;
-    font-size: 0.8125rem;
+    font-size: 11px;
     font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    line-height: 1.3;
+  }
+
+  @media (min-width: 768px) {
+    .help-nav {
+      font-size: 0.8125rem;
+    }
   }
 
   .help-field-counter {
     @apply text-light-text-muted dark:text-monokai-text-muted;
-    font-size: 0.8125rem;
+    font-size: 11px;
     font-weight: 600;
+    white-space: nowrap;
+  }
+
+  @media (min-width: 768px) {
+    .help-field-counter {
+      font-size: 0.8125rem;
+    }
   }
 
   .help-content {
@@ -520,13 +665,25 @@
     font-size: 0.8125rem;
     font-weight: 600;
     line-height: 1.4;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
   }
 
   .market-averages-inline {
-    padding: 0.125rem 0.75rem 0.125rem 2.25rem;
-    font-size: 0.8125rem;
+    padding: 0.125rem 0.5rem 0.125rem 1.5rem;
+    font-size: 12px;
     font-weight: 600;
     @apply text-light-text dark:text-monokai-text;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  @media (min-width: 768px) {
+    .market-averages-inline {
+      padding: 0.125rem 0.75rem 0.125rem 2.25rem;
+      font-size: 0.8125rem;
+    }
   }
 
   .calculate-link {

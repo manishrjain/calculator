@@ -141,11 +141,13 @@
     };
   });
 
-  // Update body overflow based on whether we're showing results
+  // Update body overflow and scroll behavior
   $: {
     if (typeof document !== 'undefined') {
+      // Always allow scrolling so header can scroll away
+      document.body.style.overflow = 'auto';
+
       if (showResults) {
-        document.body.style.overflow = 'auto';
         // Scroll to bottom after results are rendered
         setTimeout(() => {
           window.scrollTo({
@@ -153,8 +155,6 @@
             behavior: 'smooth'
           });
         }, 100);
-      } else {
-        document.body.style.overflow = 'hidden';
       }
     }
   }
@@ -208,24 +208,24 @@
   }
 </script>
 
-<main class="min-h-screen bg-light-bg dark:bg-black text-light-text dark:text-monokai-text p-4 md:p-8">
-  <div class="max-w-7xl mx-auto">
-    <header class="mb-8">
-      <div class="border-2 border-light-border dark:border-monokai-border rounded-lg p-4 bg-light-bg dark:bg-black">
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center gap-2 text-xs font-mono">
+<main class="min-h-screen bg-light-bg dark:bg-black text-light-text dark:text-monokai-text p-4 md:p-8 overflow-x-hidden">
+  <div class="max-w-7xl mx-auto w-full">
+    <header class="mb-4 md:mb-8">
+      <div class="border-2 border-light-border dark:border-monokai-border rounded-lg p-2 md:p-4 bg-light-bg dark:bg-black">
+        <div class="flex items-center justify-between mb-1 md:mb-2">
+          <div class="flex items-center gap-1 md:gap-2 text-xs font-mono">
             <span class="text-light-pink dark:text-monokai-pink">$</span>
             <span class="text-light-text dark:text-monokai-text">./calculator</span>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1 md:gap-2">
             <ShareButton copied={shareCopied} on:share={handleShare} />
             <ThemeToggle />
           </div>
         </div>
-        <h1 class="text-2xl font-bold text-light-orange dark:text-monokai-orange font-mono">
+        <h1 class="text-lg md:text-2xl font-bold text-light-orange dark:text-monokai-orange font-mono">
           BRiSK Calculator: Buy v Rent / Sell v Keep
         </h1>
-        <div class="mt-2 text-xs text-light-text-muted dark:text-monokai-text-muted">
+        <div class="mt-1 md:mt-2 text-xs text-light-text-muted dark:text-monokai-text-muted">
           Make a calculated decision
         </div>
       </div>
