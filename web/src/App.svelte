@@ -237,8 +237,7 @@
     const resultsElement = document.getElementById('results-content');
     if (!resultsElement) return;
 
-    // Temporarily switch to full numbers for LLM review
-    const previousShowFullNumbers = showFullNumbers;
+    // Switch to full numbers for LLM review (don't switch back - better for readability)
     showFullNumbers = true;
 
     // Wait for Svelte to re-render with full numbers
@@ -251,9 +250,6 @@
 `;
     const text = prompt + resultsElement.innerText;
     const success = await copyToClipboard(text);
-
-    // Restore previous setting
-    showFullNumbers = previousShowFullNumbers;
 
     if (success) {
       shareMessage = 'Results copied! Paste into Claude or Gemini (ChatGPT struggles with calculations).';
