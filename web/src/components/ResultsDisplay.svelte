@@ -104,6 +104,9 @@
           <div><span class="text-light-cyan dark:text-monokai-cyan">Loan Amount:</span> {formatCurrency(inputs.loanAmount, true)}</div>
           <div><span class="text-light-cyan dark:text-monokai-cyan">Loan Rate:</span> {formatPercent(inputs.loanRate)}</div>
           <div><span class="text-light-cyan dark:text-monokai-cyan">Loan Duration:</span> {formatDuration(inputs.loanTerm)}</div>
+          {#if inputs.mortgageInterestDeduction > 0}
+            <div><span class="text-light-cyan dark:text-monokai-cyan">Mortgage Interest Deduction:</span> {formatPercent(inputs.mortgageInterestDeduction)}</div>
+          {/if}
         </div>
       </div>
 
@@ -170,6 +173,9 @@
           {:else}
             <div><span class="text-light-cyan dark:text-monokai-cyan">Loan Status:</span> Fully paid off</div>
           {/if}
+          {#if inputs.mortgageInterestDeduction > 0}
+            <div><span class="text-light-cyan dark:text-monokai-cyan">Mortgage Interest Deduction:</span> {formatPercent(inputs.mortgageInterestDeduction)}</div>
+          {/if}
         </div>
       </div>
 
@@ -210,7 +216,7 @@
   <!-- Amortization Table -->
   {#if results.amortizationTable && inputs.loanAmount > 0}
     <section id="loan-amortization" class="bg-light-bg-light dark:bg-monokai-bg-light p-6 rounded-lg">
-      <h2 class="section-title">Loan Amortization Details</h2>
+      <h2 class="section-title">Loan Amortization</h2>
       <div class="table-container">
         <table class="data-table">
           <thead>
@@ -218,6 +224,11 @@
               <th>Period</th>
               <th class="text-right">Principal Paid</th>
               <th class="text-right">Interest Paid</th>
+              {#if inputs.mortgageInterestDeduction > 0}
+                <th class="text-right">Tax Deduction</th>
+                <th class="text-right">Eff. Interest</th>
+                <th class="text-right">Eff. Loan Pmt ③</th>
+              {/if}
               <th class="text-right">Loan Balance</th>
             </tr>
           </thead>
@@ -227,6 +238,11 @@
                 <td class="font-mono">{row.period}</td>
                 <td class="text-right font-mono">{formatCurrency(row.principalPaid)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.interestPaid)}</td>
+                {#if inputs.mortgageInterestDeduction > 0}
+                  <td class="text-right font-mono">-{formatCurrency(row.taxDeduction)}</td>
+                  <td class="text-right font-mono">{formatCurrency(row.effectiveInterest)}</td>
+                  <td class="text-right font-mono">{formatCurrency(row.effectiveLoanPayment)}</td>
+                {/if}
                 <td class="text-right font-mono">{formatCurrency(row.loanBalance)}</td>
               </tr>
             {/each}
@@ -235,6 +251,16 @@
       </div>
       <div class="help-text mt-2">
         <p>Note: Monthly payment is fixed. Each payment covers interest on remaining balance, with the rest going to principal.</p>
+        <div class="grid grid-cols-[auto_1fr] gap-x-2">
+          <span class="text-light-cyan dark:text-monokai-cyan">Principal</span><span>= Cumulative amount paid toward the loan balance.</span>
+          <span class="text-light-cyan dark:text-monokai-cyan">Interest</span><span>= Cumulative interest paid to the lender.</span>
+          {#if inputs.mortgageInterestDeduction > 0}
+            <span class="text-light-cyan dark:text-monokai-cyan">Tax Deduction</span><span>= Interest × {formatPercent(inputs.mortgageInterestDeduction)} (your mortgage interest deduction rate).</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Eff. Interest</span><span>= Interest - Tax Deduction.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Principal + Eff. Interest (cumulative amount actually paid after tax savings).</span>
+          {/if}
+          <span class="text-light-cyan dark:text-monokai-cyan">Loan Balance</span><span>= Remaining amount owed on the loan.</span>
+        </div>
       </div>
     </section>
   {/if}
@@ -248,7 +274,7 @@
           <thead>
             <tr>
               <th>Period</th>
-              <th class="text-right">Loan Payment</th>
+              <th class="text-right">{#if inputs.mortgageInterestDeduction > 0}<a href="#loan-amortization" class="underline" on:click={(e) => scrollToSection(e, 'loan-amortization')}>Eff. Loan Pmt ③</a>{:else}Loan Payment{/if}</th>
               <th class="text-right">Costs</th>
               <th class="text-right">Buying Expend.</th>
               <th class="text-right">Renting Expend.</th>
@@ -259,7 +285,7 @@
             {#each results.expenditureTable as row}
               <tr>
                 <td class="font-mono">{row.period}</td>
-                <td class="text-right font-mono">{formatCurrency(row.loanPayment)}</td>
+                <td class="text-right font-mono">{formatCurrency(inputs.mortgageInterestDeduction > 0 ? row.effectiveLoanPayment : row.loanPayment)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.costs)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.buyingExpenditure)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.rentingExpenditure)}</td>
@@ -272,7 +298,11 @@
       <div class="help-text mt-2">
         <p>Note: All recurring costs (insurance, taxes, rent, HOA, etc.) are inflated annually at {formatPercent(inputs.inflationRate)} rate.</p>
         <div class="grid grid-cols-[auto_1fr] gap-x-2">
-          <span class="text-light-cyan dark:text-monokai-cyan">Loan Payment</span><span>= Annual loan payments for that year (stops after loan term).</span>
+          {#if inputs.mortgageInterestDeduction > 0}
+            <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Annual effective loan payment after tax deduction (from <a href="#loan-amortization" class="underline" on:click={(e) => scrollToSection(e, 'loan-amortization')}>Loan Amortization</a>).</span>
+          {:else}
+            <span class="text-light-cyan dark:text-monokai-cyan">Loan Payment</span><span>= Annual loan payments for that year (stops after loan term).</span>
+          {/if}
           <span class="text-light-cyan dark:text-monokai-cyan">Costs</span><span>= Annual taxes, insurance, and other costs (inflated). Negative means income exceeds costs.</span>
           <span class="text-light-cyan dark:text-monokai-cyan">Buying Expend.</span><span>= Cumulative buying costs (downpayment + loan payments + costs).</span>
           <span class="text-light-cyan dark:text-monokai-cyan">Renting Expend.</span><span>= Cumulative renting costs (deposit + rent + annual rent costs).</span>
@@ -291,7 +321,7 @@
           <thead>
             <tr>
               <th>Period</th>
-              <th class="text-right">Loan Payment</th>
+              <th class="text-right">{#if inputs.mortgageInterestDeduction > 0}<a href="#loan-amortization" class="underline" on:click={(e) => scrollToSection(e, 'loan-amortization')}>Eff. Loan Pmt ③</a>{:else}Loan Payment{/if}</th>
               <th class="text-right">Costs</th>
               <th class="text-right">Cumulative Exp</th>
               <th class="text-right">Invest Returns</th>
@@ -303,7 +333,7 @@
             {#each results.keepExpensesTable as row}
               <tr>
                 <td class="font-mono">{row.period}</td>
-                <td class="text-right font-mono">{formatCurrency(row.loanPayment)}</td>
+                <td class="text-right font-mono">{formatCurrency(inputs.mortgageInterestDeduction > 0 ? row.effectiveLoanPayment : row.loanPayment)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.taxInsurance + row.otherCosts)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.cumulativeExp)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.investmentReturns)}</td>
@@ -317,7 +347,11 @@
       <div class="help-text mt-2">
         <p>Note: This table tracks only cash flow (expenses and income) from the asset, not asset value or equity.</p>
         <div class="grid grid-cols-[auto_1fr] gap-x-2">
-          <span class="text-light-cyan dark:text-monokai-cyan">Loan Payment</span><span>= Loan payments for that year (stops after loan term).</span>
+          {#if inputs.mortgageInterestDeduction > 0}
+            <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Annual effective loan payment after tax deduction (from <a href="#loan-amortization" class="underline" on:click={(e) => scrollToSection(e, 'loan-amortization')}>Loan Amortization</a>).</span>
+          {:else}
+            <span class="text-light-cyan dark:text-monokai-cyan">Loan Payment</span><span>= Loan payments for that year (stops after loan term).</span>
+          {/if}
           <span class="text-light-cyan dark:text-monokai-cyan">Costs</span><span>= Tax, insurance, and other annual costs (inflated at {formatPercent(inputs.inflationRate)} annually). Negative means income from asset exceeds costs.</span>
           <span class="text-light-cyan dark:text-monokai-cyan">Cumulative Exp</span><span>= Running total of raw expenses.</span>
           <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Cumulative investment returns (at {formatPercent(inputs.investmentReturnRate)} annual return).</span>

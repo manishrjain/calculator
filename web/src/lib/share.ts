@@ -17,6 +17,7 @@ const KEY_MAP: Record<string, string> = {
   loanTerm: 'lt',
   remainingLoanTerm: 'rlt',
   closingCosts: 'cc',
+  mortgageInterestDeduction: 'mid',
   rentDeposit: 'rd',
   monthlyRent: 'mr',
   annualRentCosts: 'arc',

@@ -53,6 +53,7 @@
       { key: 'loanTerm', label: formInputs.includeRefinance === 'yes' ? 'Refinance Term' : 'Loan Term', help: formInputs.scenario === 'sell_vs_keep' ? (formInputs.includeRefinance === 'yes' ? 'Refinance loan duration (e.g., 30y)' : 'Original loan duration when started (e.g., 30y)') : 'Loan duration (e.g., 5y, 30y)', placeholder: '30y', visible: () => true, fieldType: 'duration' },
       { key: 'remainingLoanTerm', label: 'Remaining Loan Term', help: 'Time left on loan (e.g., 25y)', placeholder: '25y', visible: () => formInputs.scenario === 'sell_vs_keep' && formInputs.includeRefinance !== 'yes', fieldType: 'duration' },
       { key: 'closingCosts', label: 'Refinance Closing Costs', help: 'Closing costs for refinance (negative if getting cash back)', placeholder: '5k', visible: () => formInputs.scenario === 'sell_vs_keep' && formInputs.includeRefinance === 'yes', fieldType: 'currency' },
+      { key: 'mortgageInterestDeduction', label: 'Mortgage Interest Deduction (%)', help: 'Effective tax rate if itemizing mortgage interest (e.g., 25%). Set to 0 if not itemizing or if rental property (costs already offset income)', placeholder: '0', visible: () => true, fieldType: 'rate' },
 
       { key: 'header_renting', label: '', help: '', placeholder: '', visible: () => true, isHeader: true, headerText: 'RENTING' },
       { key: 'includeRentingSell', label: 'Include Renting Analysis', help: 'Toggle if selling means you\'ll need to rent', placeholder: 'no', visible: () => formInputs.scenario === 'sell_vs_keep', toggleValues: ['yes', 'no'], fieldType: 'toggle' },
@@ -219,6 +220,7 @@
       loanTerm: parseDuration(formInputs.loanTerm),
       remainingLoanTerm: formInputs.remainingLoanTerm ? parseDuration(formInputs.remainingLoanTerm) : undefined,
       closingCosts: formInputs.closingCosts ? parseAmount(formInputs.closingCosts.toString()) : undefined,
+      mortgageInterestDeduction: parseFloat(formInputs.mortgageInterestDeduction) || 0,
       rentDeposit: parseAmount(formInputs.rentDeposit.toString()),
       monthlyRent: parseAmount(formInputs.monthlyRent.toString()),
       annualRentCosts: parseAmount(formInputs.annualRentCosts.toString()),
@@ -359,8 +361,7 @@
         <div class="terminal-field" class:focused={index === currentFieldIndex} class:disabled={field.disabled && field.disabled()}>
           <div class="flex flex-col md:flex-row md:items-center gap-1 md:gap-2">
             <div class="field-label md:w-72 md:flex-shrink-0">
-              <span class="text-light-pink dark:text-monokai-pink">{index === currentFieldIndex ? '>' : ' '}</span>
-              <span class="ml-2" class:text-light-pink={index === currentFieldIndex} class:dark:text-monokai-pink={index === currentFieldIndex} class:text-light-text={index !== currentFieldIndex} class:dark:text-monokai-text={index !== currentFieldIndex}>{field.label}:</span>
+              <span class:text-light-pink={index === currentFieldIndex} class:dark:text-monokai-pink={index === currentFieldIndex} class:text-light-text={index !== currentFieldIndex} class:dark:text-monokai-text={index !== currentFieldIndex}>{field.label}:</span>
             </div>
             <div class="field-input flex-1 min-w-0 ml-6 md:ml-0">
               {#if field.fieldType === 'toggle'}

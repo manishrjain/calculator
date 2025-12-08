@@ -25,6 +25,7 @@ export interface CalculatorInputs {
   includeRefinance?: boolean; // Only for sell_vs_keep
   payoffBalance?: number; // Only for sell_vs_keep with refinance
   closingCosts?: number; // Only for sell_vs_keep with refinance
+  mortgageInterestDeduction: number; // Effective tax rate for mortgage interest deduction (0 to skip)
 
   // Renting
   rentDeposit: number;
@@ -50,12 +51,17 @@ export interface AmortizationRow {
   period: string;
   principalPaid: number;
   interestPaid: number;
+  taxDeduction: number; // Tax savings from mortgage interest deduction
+  effectiveInterest: number; // Interest paid after tax deduction
+  effectiveLoanPayment: number; // Principal + Effective Interest (what you actually pay)
   loanBalance: number;
 }
 
 export interface ExpenditureRow {
   period: string;
   loanPayment: number;
+  taxDeduction: number; // Tax savings from mortgage interest deduction
+  effectiveLoanPayment: number; // Loan payment after tax deduction
   costs: number;
   buyingExpenditure: number;
   rentingExpenditure: number;
@@ -95,6 +101,8 @@ export interface SellVsKeepRow {
 export interface KeepExpensesRow {
   period: string;
   loanPayment: number;
+  taxDeduction: number; // Tax savings from mortgage interest deduction
+  effectiveLoanPayment: number; // Loan payment after tax deduction
   taxInsurance: number;
   otherCosts: number;
   cumulativeExp: number;

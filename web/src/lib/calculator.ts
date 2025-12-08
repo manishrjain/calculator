@@ -156,6 +156,9 @@ export function populateMonthlyCosts(inputs: CalculatorInputs): {
   const monthlyRate = inputs.loanRate / 100 / 12;
   const { effectiveLoanAmount, effectiveLoanTerm, monthlyLoanPayment } = getEffectiveLoanValues(inputs);
 
+  // Mortgage interest deduction rate
+  const taxDeductionRate = inputs.mortgageInterestDeduction / 100;
+
   let currentRentingCost =
     inputs.monthlyRent + inputs.annualRentCosts / 12 + inputs.otherAnnualCosts / 12;
   let currentRecurringExpenses = monthlyRecurringExpenses;
@@ -173,14 +176,17 @@ export function populateMonthlyCosts(inputs: CalculatorInputs): {
     monthlyRentingCosts[i] = currentRentingCost;
 
     if (i < effectiveLoanTerm) {
-      monthlyBuyingCosts[i] = monthlyLoanPayment + currentRecurringExpenses;
-
       const interestPayment = currentBalance * monthlyRate;
       const principalPayment = monthlyLoanPayment - interestPayment;
+
+      // Apply tax deduction to reduce effective interest cost
+      const effectiveInterestPayment = interestPayment * (1 - taxDeductionRate);
+      monthlyBuyingCosts[i] = principalPayment + effectiveInterestPayment + currentRecurringExpenses;
+
       currentBalance -= principalPayment;
 
       totalPrincipalPaid += principalPayment;
-      totalInterestPaid += interestPayment;
+      totalInterestPaid += interestPayment; // Track actual interest paid (pre-deduction)
 
       remainingLoanBalance[i] = currentBalance;
       cumulativePrincipalPaid[i] = totalPrincipalPaid;
@@ -406,20 +412,31 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
     // Amortization table
     if (inputs.loanAmount > 0) {
       const loanValues = getEffectiveLoanValues(inputs);
+      const taxRate = inputs.mortgageInterestDeduction / 100;
       results.amortizationTable = periods.map((period) => {
         if (period.months === 0) {
           return {
             period: 'LOAN ' + period.label,
             principalPaid: 0,
             interestPaid: 0,
+            taxDeduction: 0,
+            effectiveInterest: 0,
+            effectiveLoanPayment: 0,
             loanBalance: loanValues.effectiveLoanAmount,
           };
         }
         const monthIndex = Math.min(period.months - 1, costs.remainingLoanBalance.length - 1);
+        const principalPaid = costs.cumulativePrincipalPaid[monthIndex];
+        const interestPaid = costs.cumulativeInterestPaid[monthIndex];
+        const taxDeduction = interestPaid * taxRate;
+        const effectiveInterest = interestPaid - taxDeduction;
         return {
           period: 'LOAN ' + period.label,
-          principalPaid: costs.cumulativePrincipalPaid[monthIndex],
-          interestPaid: costs.cumulativeInterestPaid[monthIndex],
+          principalPaid,
+          interestPaid,
+          taxDeduction,
+          effectiveInterest,
+          effectiveLoanPayment: principalPaid + effectiveInterest,
           loanBalance: costs.remainingLoanBalance[monthIndex],
         };
       });
@@ -427,6 +444,7 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
 
     // Expenditure table
     const loanValues = getEffectiveLoanValues(inputs);
+    const taxRate = inputs.mortgageInterestDeduction / 100;
     results.expenditureTable = periods.map((period) => {
       const downpayment = inputs.purchasePrice - inputs.loanAmount;
       let buyingExpenditure = downpayment;
@@ -443,9 +461,21 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
       const annualCosts = (inputs.annualInsurance + inputs.annualTaxes - inputs.annualIncome) * inflationFactor;
       const loanPayment = period.months <= loanValues.effectiveLoanTerm ? loanValues.monthlyLoanPayment * 12 : 0;
 
+      // Calculate annual interest for this year to get tax deduction
+      // Interest paid in year N = cumulative at end of year N - cumulative at end of year N-1
+      const monthIndex = Math.min(period.months - 1, costs.cumulativeInterestPaid.length - 1);
+      const prevMonthIndex = Math.max(0, period.months - 13);
+      const yearInterest = period.months === 0 ? 0 :
+        period.months <= 12 ? costs.cumulativeInterestPaid[monthIndex] :
+        costs.cumulativeInterestPaid[monthIndex] - costs.cumulativeInterestPaid[prevMonthIndex];
+      const taxDeduction = yearInterest * taxRate;
+      const effectiveLoanPayment = loanPayment - taxDeduction;
+
       return {
         period: 'EXP ' + period.label,
         loanPayment,
+        taxDeduction,
+        effectiveLoanPayment,
         costs: annualCosts,
         buyingExpenditure,
         rentingExpenditure,
@@ -510,6 +540,7 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
 
     // Keep Expenses Breakdown table
     const loanValues = getEffectiveLoanValues(inputs);
+    const taxRate = inputs.mortgageInterestDeduction / 100;
 
     // Amortization table for sell_vs_keep (if loan exists)
     if (inputs.loanAmount > 0) {
@@ -519,24 +550,45 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
             period: 'LOAN ' + period.label,
             principalPaid: 0,
             interestPaid: 0,
+            taxDeduction: 0,
+            effectiveInterest: 0,
+            effectiveLoanPayment: 0,
             loanBalance: loanValues.effectiveLoanAmount,
           };
         }
         const monthIndex = Math.min(period.months - 1, costs.remainingLoanBalance.length - 1);
+        const principalPaid = costs.cumulativePrincipalPaid[monthIndex];
+        const interestPaid = costs.cumulativeInterestPaid[monthIndex];
+        const taxDeduction = interestPaid * taxRate;
+        const effectiveInterest = interestPaid - taxDeduction;
         return {
           period: 'LOAN ' + period.label,
-          principalPaid: costs.cumulativePrincipalPaid[monthIndex],
-          interestPaid: costs.cumulativeInterestPaid[monthIndex],
+          principalPaid,
+          interestPaid,
+          taxDeduction,
+          effectiveInterest,
+          effectiveLoanPayment: principalPaid + effectiveInterest,
           loanBalance: costs.remainingLoanBalance[monthIndex],
         };
       });
     }
 
     results.keepExpensesTable = periods.map((period) => {
+      // Calculate annual interest for this year to get tax deduction
+      const monthIndex = Math.min(period.months - 1, costs.cumulativeInterestPaid.length - 1);
+      const prevMonthIndex = Math.max(0, period.months - 13);
+      const yearInterest = period.months === 0 ? 0 :
+        period.months <= 12 ? costs.cumulativeInterestPaid[monthIndex] :
+        costs.cumulativeInterestPaid[monthIndex] - costs.cumulativeInterestPaid[prevMonthIndex];
+      const taxDeduction = yearInterest * taxRate;
+
       if (period.months === 0) {
+        const loanPayment = loanValues.monthlyLoanPayment * 12;
         return {
           period: 'KEEP ' + period.label,
-          loanPayment: loanValues.monthlyLoanPayment * 12,
+          loanPayment,
+          taxDeduction: 0,
+          effectiveLoanPayment: loanPayment,
           taxInsurance: inputs.annualInsurance,
           otherCosts: inputs.annualTaxes - inputs.annualIncome,
           cumulativeExp: 0,
@@ -546,7 +598,6 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
         };
       }
 
-      const monthIndex = Math.min(period.months - 1, 359);
       const year = Math.floor(period.months / 12);
 
       // Calculate annual costs for that specific year
@@ -556,6 +607,7 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
 
       // Loan payment for that year (0 if loan is paid off)
       const loanPayment = period.months <= loanValues.effectiveLoanTerm ? loanValues.monthlyLoanPayment * 12 : 0;
+      const effectiveLoanPayment = loanPayment - taxDeduction;
 
       // Cumulative expenses up to this period
       let cumulativeExp = 0;
@@ -566,6 +618,8 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
       return {
         period: 'KEEP ' + period.label,
         loanPayment,
+        taxDeduction,
+        effectiveLoanPayment,
         taxInsurance,
         otherCosts,
         cumulativeExp,

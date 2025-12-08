@@ -34,6 +34,7 @@
     loanTerm: '30y',
     remainingLoanTerm: '',
     closingCosts: '5K',
+    mortgageInterestDeduction: '0',
     rentDeposit: '5K',
     monthlyRent: '3K',
     annualRentCosts: '1K',
