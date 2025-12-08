@@ -404,6 +404,12 @@
       {/if}
     {/each}
 
+      <!-- Calculate button - visible on all devices -->
+      <div class="calculate-button-container">
+        <button type="submit" class="calculate-button">
+          Calculate
+        </button>
+      </div>
     </form>
   </div>
 
@@ -650,6 +656,36 @@
   }
 
   .secondary-button-bar:active {
+    opacity: 0.8;
+  }
+
+  .calculate-button-container {
+    margin-top: 1rem;
+    padding: 0.5rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .calculate-button {
+    @apply bg-light-pink dark:bg-monokai-pink;
+    @apply text-white;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 0.75rem 2rem;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .calculate-button:hover {
+    opacity: 0.9;
+  }
+
+  .calculate-button:active {
     opacity: 0.8;
   }
 
