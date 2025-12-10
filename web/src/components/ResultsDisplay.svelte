@@ -156,6 +156,7 @@
       incomeMinusCosts: row.incomeMinusCosts - prevRow.incomeMinusCosts,
       cumulativeExp: row.cumulativeExp - prevRow.cumulativeExp,
       investmentReturns: row.investmentReturns - prevRow.investmentReturns,
+      investmentVal: row.investmentVal - prevRow.investmentVal,
       netPosition: row.netPosition - prevRow.netPosition,
     };
   }) ?? [];
@@ -319,14 +320,6 @@
 
   <!-- Market Data Reference -->
   <MarketDataTable />
-
-  <!-- Yearly Mode Disclaimer -->
-  {#if viewMode === 'yearly'}
-    <div class="bg-light-orange/10 dark:bg-monokai-orange/10 border border-light-orange dark:border-monokai-orange rounded-lg p-4 text-sm">
-      <span class="text-light-orange dark:text-monokai-orange font-bold">Note:</span>
-      <span class="text-light-text dark:text-monokai-text"> Yearly view shows period-over-period changes. Some values (like Loan Balance, Asset Value) are point-in-time snapshots and their yearly "change" may be less intuitive than cumulative totals.</span>
-    </div>
-  {/if}
 
   <!-- Amortization Table -->
   {#if results.amortizationTable && inputs.loanAmount > 0}
@@ -492,9 +485,9 @@
             {/if}
             <span class="text-light-cyan dark:text-monokai-cyan">Income - Costs</span><span>= Income - (tax + insurance + other costs), inflated at {formatPercent(inputs.inflationRate)}. Positive = net income, Negative = net costs.</span>
             <span class="text-light-cyan dark:text-monokai-cyan">Total</span><span>= {inputs.mortgageInterestDeduction > 0 ? 'Eff. Loan Pmt' : 'Loan Payment'} + (Income - Costs). Negative = net cash outflow to keep asset.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Cumulative investment returns at {formatPercent(inputs.investmentReturnRate)} annual rate.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Starting cash + Invest Returns + Total (adjusted for withdrawals/deposits).</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Investment Val + Total = your net cash position from keeping the asset.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Returns on positive cash flow, invested at {formatPercent(inputs.investmentReturnRate)} annual return rate.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Current value of your investment account (starting cash + positive cash flow + returns).</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Investment Val minus any out-of-pocket costs when the account ran dry.</span>
           {:else}
             {#if inputs.mortgageInterestDeduction > 0}
               <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Negative of effective loan payment for this period (outflow).</span>
@@ -503,9 +496,9 @@
             {/if}
             <span class="text-light-cyan dark:text-monokai-cyan">Income - Costs</span><span>= Income - costs for this period. Positive = net income, Negative = net costs.</span>
             <span class="text-light-cyan dark:text-monokai-cyan">Total</span><span>= {inputs.mortgageInterestDeduction > 0 ? 'Eff. Loan Pmt' : 'Loan Payment'} + (Income - Costs) for this period.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Investment returns earned in this period.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Current value of investments (point-in-time snapshot).</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Change in net position for this period.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Returns on positive cash flow for this period, invested at {formatPercent(inputs.investmentReturnRate)} annual return rate.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Current value of your investment account (point-in-time snapshot).</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Investment Val minus any out-of-pocket costs when the account ran dry.</span>
           {/if}
         </div>
       </div>
