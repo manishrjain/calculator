@@ -156,7 +156,6 @@
       incomeMinusCosts: row.incomeMinusCosts - prevRow.incomeMinusCosts,
       cumulativeExp: row.cumulativeExp - prevRow.cumulativeExp,
       investmentReturns: row.investmentReturns - prevRow.investmentReturns,
-      investmentVal: row.investmentVal - prevRow.investmentVal,
       netPosition: row.netPosition - prevRow.netPosition,
     };
   }) ?? [];
@@ -455,7 +454,6 @@
               <th class="text-right">Income - Costs</th>
               <th class="text-right">Total</th>
               <th class="text-right">Invest Returns</th>
-              <th class="text-right">Investment Val</th>
               <th class="text-right">Net Position ②</th>
             </tr>
           </thead>
@@ -467,7 +465,6 @@
                 <td class="text-right font-mono">{formatCurrency(row.incomeMinusCosts)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.cumulativeExp)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.investmentReturns)}</td>
-                <td class="text-right font-mono">{formatCurrency(row.investmentVal)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.netPosition)}</td>
               </tr>
             {/each}
@@ -485,9 +482,8 @@
             {/if}
             <span class="text-light-cyan dark:text-monokai-cyan">Income - Costs</span><span>= Income - (tax + insurance + other costs), inflated at {formatPercent(inputs.inflationRate)}. Positive = net income, Negative = net costs.</span>
             <span class="text-light-cyan dark:text-monokai-cyan">Total</span><span>= {inputs.mortgageInterestDeduction > 0 ? 'Eff. Loan Pmt' : 'Loan Payment'} + (Income - Costs). Negative = net cash outflow to keep asset.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Returns on positive cash flow, invested at {formatPercent(inputs.investmentReturnRate)} annual return rate.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Current value of your investment account (starting cash + positive cash flow + returns).</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Investment Val minus any out-of-pocket costs when the account ran dry.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Returns on positive net position, invested at {formatPercent(inputs.investmentReturnRate)} annual return rate.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Starting cash + Total + Invest Returns. Positive cash flow first pays off any deficit before earning returns.</span>
           {:else}
             {#if inputs.mortgageInterestDeduction > 0}
               <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Negative of effective loan payment for this period (outflow).</span>
@@ -496,9 +492,8 @@
             {/if}
             <span class="text-light-cyan dark:text-monokai-cyan">Income - Costs</span><span>= Income - costs for this period. Positive = net income, Negative = net costs.</span>
             <span class="text-light-cyan dark:text-monokai-cyan">Total</span><span>= {inputs.mortgageInterestDeduction > 0 ? 'Eff. Loan Pmt' : 'Loan Payment'} + (Income - Costs) for this period.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Returns on positive cash flow for this period, invested at {formatPercent(inputs.investmentReturnRate)} annual return rate.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Current value of your investment account (point-in-time snapshot).</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Investment Val minus any out-of-pocket costs when the account ran dry.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Returns on positive net position for this period, at {formatPercent(inputs.investmentReturnRate)} annual return rate.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Change in net position for this period.</span>
           {/if}
         </div>
       </div>

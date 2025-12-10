@@ -105,7 +105,6 @@ export interface KeepExpensesRow {
   effectiveLoanPayment: number; // Loan payment after tax deduction (negative = outflow)
   incomeMinusCosts: number; // Income - Costs (positive = net income, negative = net costs)
   cumulativeExp: number; // Total cash flow (negative = net outflow)
-  investmentVal: number;
   investmentReturns: number;
   netPosition: number;
 }
@@ -119,8 +118,6 @@ export interface CalculationResults {
   cumulativeInterestPaid: number[];
 
   // For KEEP scenario
-  monthlyKeepInvestmentValue: number[];
-  monthlyKeepRealCosts: number[];
   monthlyKeepNetPosition: number[];
   monthlyKeepInvestmentReturns: number[];
 

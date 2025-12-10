@@ -176,49 +176,37 @@ export function calculateKeepInvestmentTracking(
   maxMonths: number,
   initialCashOut: number = 0
 ): {
-  monthlyKeepInvestmentValue: number[];
-  monthlyKeepRealCosts: number[];
   monthlyKeepNetPosition: number[];
   monthlyKeepInvestmentReturns: number[];
 } {
-  const monthlyKeepInvestmentValue: number[] = new Array(maxMonths);
-  const monthlyKeepRealCosts: number[] = new Array(maxMonths);
   const monthlyKeepNetPosition: number[] = new Array(maxMonths);
   const monthlyKeepInvestmentReturns: number[] = new Array(maxMonths);
 
-  let investmentValue = initialCashOut;
-  let totalRealCosts = 0;
+  // Net position: positive = invested cash, negative = debt/deficit
+  // Only positive net position earns investment returns
+  let netPosition = initialCashOut;
   let totalReturns = 0;
   const monthlyInvestmentRate = investmentReturnRate / 100 / 12;
 
   for (let i = 0; i < maxMonths; i++) {
     const monthlyCost = monthlyBuyingCosts[i];
 
-    if (monthlyCost < 0) {
-      investmentValue += -monthlyCost;
-    } else if (monthlyCost > 0) {
-      if (investmentValue >= monthlyCost) {
-        investmentValue -= monthlyCost;
-      } else {
-        const deficit = monthlyCost - investmentValue;
-        investmentValue = 0;
-        totalRealCosts += deficit;
-      }
+    // Negative cost = income (positive cash flow), positive cost = expense (negative cash flow)
+    // Cash flow is applied directly to net position
+    netPosition -= monthlyCost;
+
+    // Only earn returns if net position is positive
+    if (netPosition > 0) {
+      const monthlyReturn = netPosition * monthlyInvestmentRate;
+      totalReturns += monthlyReturn;
+      netPosition *= 1 + monthlyInvestmentRate;
     }
 
-    const monthlyReturn = investmentValue * monthlyInvestmentRate;
-    totalReturns += monthlyReturn;
-    investmentValue *= 1 + monthlyInvestmentRate;
-
-    monthlyKeepInvestmentValue[i] = investmentValue;
-    monthlyKeepRealCosts[i] = totalRealCosts;
-    monthlyKeepNetPosition[i] = investmentValue - totalRealCosts;
+    monthlyKeepNetPosition[i] = netPosition;
     monthlyKeepInvestmentReturns[i] = totalReturns;
   }
 
   return {
-    monthlyKeepInvestmentValue,
-    monthlyKeepRealCosts,
     monthlyKeepNetPosition,
     monthlyKeepInvestmentReturns,
   };
@@ -545,7 +533,6 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
           effectiveLoanPayment: 0,  // Negative = outflow
           incomeMinusCosts: 0,      // Positive = net income, Negative = net costs
           cumulativeExp: 0,         // Negative = net outflow
-          investmentVal: refinanceCashOut,
           investmentReturns: 0,
           netPosition: refinanceCashOut,
         };
@@ -577,7 +564,6 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
         effectiveLoanPayment: -effectiveLoanPayment,  // Negative = outflow
         incomeMinusCosts: cumulativeIncomeMinusCosts, // Positive = net income, Negative = net costs
         cumulativeExp: -cumulativeExp,                // Negative = net outflow
-        investmentVal: keepTracking.monthlyKeepInvestmentValue[monthIndex],
         investmentReturns: keepTracking.monthlyKeepInvestmentReturns[monthIndex],
         netPosition: keepTracking.monthlyKeepNetPosition[monthIndex],
       };
