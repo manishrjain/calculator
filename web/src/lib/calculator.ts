@@ -542,10 +542,9 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
           period: 'KEEP ' + period.label,
           loanPayment: 0,
           taxDeduction: 0,
-          effectiveLoanPayment: 0,
-          taxInsurance: 0,
-          otherCosts: 0,
-          cumulativeExp: 0,
+          effectiveLoanPayment: 0,  // Negative = outflow
+          incomeMinusCosts: 0,      // Positive = net income, Negative = net costs
+          cumulativeExp: 0,         // Negative = net outflow
           investmentVal: refinanceCashOut,
           investmentReturns: 0,
           netPosition: refinanceCashOut,
@@ -558,16 +557,14 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
       const taxDeduction = amortRow?.taxDeduction ?? 0;
       const effectiveLoanPayment = amortRow?.effectiveLoanPayment ?? 0;
 
-      // Calculate cumulative costs (tax/insurance and other costs)
-      let cumulativeTaxInsurance = 0;
-      let cumulativeOtherCosts = 0;
+      // Calculate cumulative income minus costs (positive = income exceeds costs)
+      let cumulativeIncomeMinusCosts = 0;
       for (let year = 0; year < period.months / 12; year++) {
         const inflationFactor = Math.pow(1 + inputs.inflationRate / 100, year);
-        cumulativeTaxInsurance += inputs.annualInsurance * inflationFactor;
-        cumulativeOtherCosts += (inputs.annualTaxes - inputs.annualIncome) * inflationFactor;
+        cumulativeIncomeMinusCosts += (inputs.annualIncome - inputs.annualInsurance - inputs.annualTaxes) * inflationFactor;
       }
 
-      // Cumulative expenses up to this period
+      // Cumulative expenses up to this period (as negative = outflow)
       let cumulativeExp = 0;
       for (let i = 0; i < period.months; i++) {
         cumulativeExp += costs.monthlyBuyingCosts[i];
@@ -577,10 +574,9 @@ export function calculate(inputs: CalculatorInputs): CalculationResults {
         period: 'KEEP ' + period.label,
         loanPayment,
         taxDeduction,
-        effectiveLoanPayment,
-        taxInsurance: cumulativeTaxInsurance,
-        otherCosts: cumulativeOtherCosts,
-        cumulativeExp,
+        effectiveLoanPayment: -effectiveLoanPayment,  // Negative = outflow
+        incomeMinusCosts: cumulativeIncomeMinusCosts, // Positive = net income, Negative = net costs
+        cumulativeExp: -cumulativeExp,                // Negative = net outflow
         investmentVal: keepTracking.monthlyKeepInvestmentValue[monthIndex],
         investmentReturns: keepTracking.monthlyKeepInvestmentReturns[monthIndex],
         netPosition: keepTracking.monthlyKeepNetPosition[monthIndex],

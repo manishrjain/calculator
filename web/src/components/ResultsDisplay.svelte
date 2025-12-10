@@ -152,9 +152,8 @@
       ...row,
       loanPayment: row.loanPayment - prevRow.loanPayment,
       taxDeduction: row.taxDeduction - prevRow.taxDeduction,
-      effectiveLoanPayment: Math.max(0, row.effectiveLoanPayment - prevRow.effectiveLoanPayment),
-      taxInsurance: row.taxInsurance - prevRow.taxInsurance,
-      otherCosts: row.otherCosts - prevRow.otherCosts,
+      effectiveLoanPayment: row.effectiveLoanPayment - prevRow.effectiveLoanPayment,
+      incomeMinusCosts: row.incomeMinusCosts - prevRow.incomeMinusCosts,
       cumulativeExp: row.cumulativeExp - prevRow.cumulativeExp,
       investmentReturns: row.investmentReturns - prevRow.investmentReturns,
       netPosition: row.netPosition - prevRow.netPosition,
@@ -460,8 +459,8 @@
             <tr>
               <th>Period</th>
               <th class="text-right">{#if inputs.mortgageInterestDeduction > 0}<a href="#loan-amortization" class="hover:underline cursor-pointer" on:click={(e) => scrollToSection(e, 'loan-amortization')}>Eff. Loan Pmt ③</a>{:else}Loan Payment{/if}</th>
-              <th class="text-right">Costs</th>
-              <th class="text-right">Expenses</th>
+              <th class="text-right">Income - Costs</th>
+              <th class="text-right">Total</th>
               <th class="text-right">Invest Returns</th>
               <th class="text-right">Investment Val</th>
               <th class="text-right">Net Position ②</th>
@@ -471,8 +470,8 @@
             {#each keepExpensesDisplayData as row}
               <tr>
                 <td class="font-mono">{row.period}</td>
-                <td class="text-right font-mono">{formatCurrency(inputs.mortgageInterestDeduction > 0 ? row.effectiveLoanPayment : row.loanPayment)}</td>
-                <td class="text-right font-mono">{formatCurrency(row.taxInsurance + row.otherCosts)}</td>
+                <td class="text-right font-mono">{formatCurrency(row.effectiveLoanPayment)}</td>
+                <td class="text-right font-mono">{formatCurrency(row.incomeMinusCosts)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.cumulativeExp)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.investmentReturns)}</td>
                 <td class="text-right font-mono">{formatCurrency(row.investmentVal)}</td>
@@ -483,27 +482,27 @@
         </table>
       </div>
       <div class="help-text mt-2">
-        <p>Note: This table tracks only cash flow (expenses and income) from the asset, not asset value or equity.</p>
+        <p>Note: Negative values = outflows (money you spend), Positive values = inflows (money you receive).</p>
         <div class="grid grid-cols-[auto_1fr] gap-x-2">
           {#if viewMode === 'cumulative'}
             {#if inputs.mortgageInterestDeduction > 0}
-              <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Cumulative effective loan payment after tax deduction (from <a href="#loan-amortization" class="underline" on:click={(e) => scrollToSection(e, 'loan-amortization')}>Loan Amortization</a>).</span>
+              <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Negative of cumulative effective loan payment (outflow).</span>
             {:else}
-              <span class="text-light-cyan dark:text-monokai-cyan">Loan Payment</span><span>= Cumulative loan payments.</span>
+              <span class="text-light-cyan dark:text-monokai-cyan">Loan Payment</span><span>= Negative of cumulative loan payments (outflow).</span>
             {/if}
-            <span class="text-light-cyan dark:text-monokai-cyan">Costs</span><span>= Cumulative tax, insurance, and other costs (inflated at {formatPercent(inputs.inflationRate)} annually). Negative means income exceeds costs.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Expenses</span><span>= Running total of raw expenses.</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Cumulative investment returns (at {formatPercent(inputs.investmentReturnRate)} annual return).</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Current value of investments (initial cash + returns - withdrawals).</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Investment value minus real out-of-pocket costs.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Income - Costs</span><span>= Income - (tax + insurance + other costs), inflated at {formatPercent(inputs.inflationRate)}. Positive = net income, Negative = net costs.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Total</span><span>= {inputs.mortgageInterestDeduction > 0 ? 'Eff. Loan Pmt' : 'Loan Payment'} + (Income - Costs). Negative = net cash outflow to keep asset.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Cumulative investment returns at {formatPercent(inputs.investmentReturnRate)} annual rate.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Starting cash + Invest Returns + Total (adjusted for withdrawals/deposits).</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Investment Val + Total = your net cash position from keeping the asset.</span>
           {:else}
             {#if inputs.mortgageInterestDeduction > 0}
-              <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Annual effective loan payment after tax deduction (from <a href="#loan-amortization" class="underline" on:click={(e) => scrollToSection(e, 'loan-amortization')}>Loan Amortization</a>).</span>
+              <span class="text-light-cyan dark:text-monokai-cyan">Eff. Loan Pmt ③</span><span>= Negative of effective loan payment for this period (outflow).</span>
             {:else}
-              <span class="text-light-cyan dark:text-monokai-cyan">Loan Payment</span><span>= Loan payments for that year.</span>
+              <span class="text-light-cyan dark:text-monokai-cyan">Loan Payment</span><span>= Negative of loan payments for this period (outflow).</span>
             {/if}
-            <span class="text-light-cyan dark:text-monokai-cyan">Costs</span><span>= Tax, insurance, and other costs for this period (inflated at {formatPercent(inputs.inflationRate)} annually).</span>
-            <span class="text-light-cyan dark:text-monokai-cyan">Expenses</span><span>= Raw expenses for this period.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Income - Costs</span><span>= Income - costs for this period. Positive = net income, Negative = net costs.</span>
+            <span class="text-light-cyan dark:text-monokai-cyan">Total</span><span>= {inputs.mortgageInterestDeduction > 0 ? 'Eff. Loan Pmt' : 'Loan Payment'} + (Income - Costs) for this period.</span>
             <span class="text-light-cyan dark:text-monokai-cyan">Invest Returns</span><span>= Investment returns earned in this period.</span>
             <span class="text-light-cyan dark:text-monokai-cyan">Investment Val</span><span>= Current value of investments (point-in-time snapshot).</span>
             <span class="text-light-cyan dark:text-monokai-cyan">Net Position ②</span><span>= Change in net position for this period.</span>
