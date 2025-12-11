@@ -12,6 +12,20 @@ If you don't buy that house, your downpayment doesn't sit in a checking account�
 
 I built [Brisk](https://manishrjain.com/brisk) to fix this. It's a financial calculator that models the full picture: loans, appreciation, opportunity costs, taxes, and investment returns -- all projected over time so you can see exactly when buying wins, when renting wins. And the more complex math of -- if you're already holding the asset, when selling wins and when keeping it makes more sense.
 
+## How Brisk Calculates
+
+Under the hood, Brisk runs a month-by-month simulation for up to 30 years. **For buying,** it generates a full amortization schedule—tracking principal, interest, and remaining loan balance each month. The effective loan payment accounts for mortgage interest deductions, reducing your cost based on your tax rate. All recurring costs (property taxes, insurance, maintenance, rent) inflate annually at your specified rate, while the mortgage payment stays fixed.
+
+**For the renting scenario,** Brisk takes your downpayment—the cash you'd have if you didn't buy—and invests it at your specified return rate. Each month, it calculates the difference between what you'd spend buying versus renting. If renting is cheaper that month, the savings get added to your investment. If buying is cheaper, it deducts from your investment. This compounds monthly, giving you a realistic picture of how your "renting portfolio" grows over time.
+
+**When calculating sale proceeds,** Brisk applies your appreciation rate year-by-year to get the future asset value, then deducts agent commissions, staging costs (inflated), remaining loan balance, and capital gains tax—accounting for exemptions like the primary residence exclusion. The result is your true net worth from buying at any given year.
+
+The sell vs keep analysis is where things get interesting. **For the "sell now" scenario,** Brisk calculates what you'd walk away with today—current market value minus selling costs, loan payoff, and taxes. That lump sum then gets invested at your specified return rate. If you'd need to rent after selling (because it's your primary residence), Brisk deducts monthly rent from your investment as it compounds.
+
+**For the "keep" scenario,** Brisk tracks your monthly cash flow—rental income minus loan payments, taxes, insurance, and maintenance. If you're cash-flow positive, that surplus gets invested and compounds. If you're cash-flow negative, you're effectively drawing down. At any future year N, your "keep net worth" combines two things: what you'd net from selling the appreciated asset at year N, plus (or minus) the investment position you've built up from your cash flows along the way.
+
+**The refinance option** adds another layer. If you pull equity out today, that cash goes into your investment account immediately—but you're now servicing a larger loan. Brisk models whether the market returns on that extracted equity outpace the cost of the bigger mortgage.
+
 ## A Real Example: Buy vs. Rent
 
 Let's run through a concrete scenario. Let's say you want to purchase a single family home in San Francisco.

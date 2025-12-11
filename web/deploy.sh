@@ -37,5 +37,9 @@ echo "Moving assets..."
 mv "$DEST/brisk/assets"/* "$DEST/brisk/"
 rmdir "$DEST/brisk/assets"
 
+# Rename index.html to _index.html (for blot.im)
+echo "Renaming index.html to _index.html..."
+mv "$DEST/brisk/index.html" "$DEST/brisk/_index.html"
+
 echo "Deploy complete!"
 echo "  Files deployed to: $DEST/brisk/"
