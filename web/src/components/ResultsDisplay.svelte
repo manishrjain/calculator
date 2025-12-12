@@ -372,9 +372,6 @@
           <div><span class="text-light-cyan dark:text-monokai-cyan">Loan Rate:</span> {formatPercent(inputs.loanRate)}</div>
           <div><span class="text-light-cyan dark:text-monokai-cyan">Remaining Loan Term:</span> {formatDuration(inputs.remainingLoanTerm || inputs.loanTerm)}</div>
           <div><span class="text-light-cyan dark:text-monokai-cyan">Monthly Payment:</span> {formatCurrency(effectiveLoanValues.monthlyLoanPayment, true)}</div>
-          {#if inputs.mortgageInterestDeduction > 0}
-            <div><span class="text-light-cyan dark:text-monokai-cyan">Mortgage Interest Deduction:</span> {formatPercent(inputs.mortgageInterestDeduction)}</div>
-          {/if}
           <div><span class="text-light-cyan dark:text-monokai-cyan">Extra Monthly Payment:</span> {formatCurrency(inputs.extraMonthlyPayment || 0, true)}</div>
         </div>
       </div>
@@ -767,7 +764,7 @@
   <!-- Invest Amortization Table -->
   {#if results.investAmortizationTable}
     <section id="invest-amortization" class="bg-light-bg-light dark:bg-monokai-bg-light p-6 rounded-lg">
-      <h2 class="section-title">INVEST Path: Loan Amortization <span class="text-xs font-normal px-1.5 py-0.5 rounded bg-light-green dark:bg-monokai-green text-white">{viewMode === 'cumulative' ? 'Cumulative' : 'Yearly'}</span></h2>
+      <h2 class="section-title">INVEST Path: Loan Amortization <span class="text-xs font-normal px-1.5 py-0.5 rounded bg-light-pink dark:bg-monokai-pink text-white">{viewMode === 'cumulative' ? 'Cumulative' : 'Yearly'}</span></h2>
       <div class="table-container">
         <table class="data-table">
           <thead>
@@ -838,7 +835,7 @@
         <p>Note: Positive PAYOFF - INVEST means paying extra wins, negative means investing wins.</p>
         <div class="grid grid-cols-[auto_1fr] gap-x-2">
           <span class="text-light-cyan dark:text-monokai-cyan">PAYOFF Loan Bal</span><span>= Remaining loan balance with accelerated payoff (extra payments go to principal).</span>
-          <span class="text-light-cyan dark:text-monokai-cyan">PAYOFF Invest</span><span>= After loan payoff, freed-up payments ({formatCurrency(effectiveLoanValues.monthlyLoanPayment + (inputs.extraMonthlyPayment || 0), true)}/month) invested at {formatPercent(inputs.investmentReturnRate)} return.</span>
+          <span class="text-light-cyan dark:text-monokai-cyan">PAYOFF Invest</span><span>= After loan payoff, freed-up payments ({formatCurrency(effectiveLoanValues.monthlyLoanPayment, true)} + {formatCurrency(inputs.extraMonthlyPayment || 0, true)}/mo) invested at {formatPercent(inputs.investmentReturnRate)} return.</span>
           <span class="text-light-cyan dark:text-monokai-cyan">PAYOFF Wealth</span><span>= Investment - Loan Balance.</span>
           <span class="text-light-cyan dark:text-monokai-cyan">INVEST Loan Bal</span><span>= Remaining loan balance with regular payments only.</span>
           <span class="text-light-cyan dark:text-monokai-cyan">INVEST Invest</span><span>= Investment value from investing extra payment ({formatCurrency(inputs.extraMonthlyPayment || 0, true)}/month) at {formatPercent(inputs.investmentReturnRate)} return.</span>
